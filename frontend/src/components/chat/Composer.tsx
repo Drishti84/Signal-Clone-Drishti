@@ -17,6 +17,12 @@ import { useUi } from "@/store/ui";
 
 const MAX_HEIGHT_PX = 132; // about six lines
 
+/** The short type label on a file tile: "PDF", "DOCX", or "FILE". */
+function fileExtension(name: string): string {
+  const extension = name.includes(".") ? name.split(".").pop() ?? "" : "";
+  return /^[a-z0-9]{1,4}$/i.test(extension) ? extension.toUpperCase() : "FILE";
+}
+
 type Props = { conversationId: number; meId: number; users: Record<number, User> };
 
 /** A file picked but not sent yet, with a preview URL if it is a picture. */
@@ -151,23 +157,44 @@ export function Composer({ conversationId, meId, users }: Props) {
       )}
 
       {draft && (
-        <div className="mb-2 flex items-center gap-3 rounded-xl bg-pane p-2">
-          {draft.previewUrl ? (
-            // A local preview of the picked file.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={draft.previewUrl} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
-          ) : (
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-hover">
-              <FileText size={24} />
-            </span>
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[13px] font-medium">{draft.file.name}</div>
-            <div className="text-xs text-fg-2">{formatBytes(draft.file.size)}</div>
+        // A small tile at the left, as in Signal: the picture itself, or a
+        // card for any other file, with the remove button on its corner.
+        <div className="mb-2 flex pl-1 pt-2">
+          <div className="relative">
+            {draft.previewUrl ? (
+              // A local preview of the picked file.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={draft.previewUrl}
+                alt={draft.file.name}
+                title={draft.file.name}
+                className="h-[104px] w-[104px] rounded-xl object-cover"
+              />
+            ) : (
+              <div
+                title={draft.file.name}
+                className="flex h-[104px] w-[104px] flex-col items-center justify-center gap-1 rounded-xl bg-pane px-2 text-center"
+              >
+                <span className="relative flex h-11 w-9 items-center justify-center text-fg-2">
+                  <FileText size={38} strokeWidth={1.2} />
+                  <span className="absolute bottom-1.5 rounded-sm bg-accent px-1 text-[9px] font-bold leading-[13px] text-white">
+                    {fileExtension(draft.file.name)}
+                  </span>
+                </span>
+                <span className="w-full truncate text-xs font-medium">{draft.file.name}</span>
+                <span className="text-[11px] leading-3 text-fg-2">{formatBytes(draft.file.size)}</span>
+              </div>
+            )}
+            <button
+              type="button"
+              aria-label="Remove attachment"
+              title="Remove attachment"
+              onClick={() => setDraft(null)}
+              className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-fg text-bg shadow-sm ring-2 ring-bg hover:opacity-85"
+            >
+              <X size={14} strokeWidth={2.6} />
+            </button>
           </div>
-          <IconButton label="Remove attachment" size={28} onClick={() => setDraft(null)}>
-            <X size={16} />
-          </IconButton>
         </div>
       )}
 
