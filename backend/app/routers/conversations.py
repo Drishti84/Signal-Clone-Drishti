@@ -6,8 +6,9 @@ from app.deps import get_current_user
 from app.models import Conversation, User
 from app.realtime.events import Event
 from app.realtime.manager import manager
-from app.schemas.conversation import ConversationOut, DirectIn, GroupIn
-from app.services import conversations
+from app.schemas.conversation import (AddMembersIn, ConversationOut, DirectIn, GroupIn,
+                                      GroupNameIn, RoleIn)
+from app.services import conversations, members
 from app.services.serializers import conversation_out
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
@@ -51,3 +52,48 @@ def get_conversation(conversation_id: int, me: User = Depends(get_current_user),
                      db: Db = Depends(get_db)):
     member = conversations.get_member(db, conversation_id, me.id)
     return _out_for(db, member.conversation, me)
+
+
+# --- Group administration -------------------------------------------------
+# The rules (who may do what) live in services/members.py; these routes only
+# commit, broadcast and shape the reply.
+
+def _finish(db: Db, result: members.Result, me: User,
+            background: BackgroundTasks) -> dict | None:
+    conv, events = result
+    db.commit()
+    background.add_task(manager.dispatch, events)
+    still_member = conv is not None and me.id in conversations.member_ids(conv)
+    return _out_for(db, conv, me) if still_member else None
+
+
+@router.patch("/{conversation_id}", response_model=ConversationOut)
+def rename_group(conversation_id: int, body: GroupNameIn, background: BackgroundTasks,
+                 me: User = Depends(get_current_user), db: Db = Depends(get_db)):
+    result = members.rename(db, me, conversation_id, body.name, manager.online_ids())
+    return _finish(db, result, me, background)
+
+
+@router.post("/{conversation_id}/members", response_model=ConversationOut)
+def add_members(conversation_id: int, body: AddMembersIn, background: BackgroundTasks,
+                me: User = Depends(get_current_user), db: Db = Depends(get_db)):
+    result = members.add_members(db, me, conversation_id, body.user_ids, manager.online_ids())
+    return _finish(db, result, me, background)
+
+
+@router.delete("/{conversation_id}/members/{user_id}",
+               response_model=ConversationOut | None)
+def remove_member(conversation_id: int, user_id: int, background: BackgroundTasks,
+                  me: User = Depends(get_current_user), db: Db = Depends(get_db)):
+    """Remove someone, or leave by passing your own id. Replies with null
+    when the caller is no longer in the group."""
+    result = members.remove_member(db, me, conversation_id, user_id, manager.online_ids())
+    return _finish(db, result, me, background)
+
+
+@router.patch("/{conversation_id}/members/{user_id}", response_model=ConversationOut)
+def set_role(conversation_id: int, user_id: int, body: RoleIn, background: BackgroundTasks,
+             me: User = Depends(get_current_user), db: Db = Depends(get_db)):
+    result = members.set_role(db, me, conversation_id, user_id, body.role,
+                              manager.online_ids())
+    return _finish(db, result, me, background)
