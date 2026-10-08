@@ -1,0 +1,135 @@
+@import "tailwindcss";
+
+/* Signal's palette as CSS variables. The dark block overrides only what
+   changes; components never hard-code a colour. */
+:root {
+  --accent: #2c6bed;
+  --accent-hover: #1851b4;
+  --bg: #ffffff;
+  --pane: #f6f6f6;
+  --surface: #ffffff;
+  --hover: #e9e9e9;
+  --selected: #dedede;
+  --border: #e3e3e3;
+  --input: #e9e9e9;
+  --bubble-in: #e9e9e9;
+  --bubble-out: #2c6bed;
+  --quote-in: #d4d4d4;
+  --fg: #1b1b1b;
+  --fg-2: #5e5e5e;
+  --fg-3: #8a8a8a;
+  --danger: #c9342b;
+  --online: #2fa84f;
+  --overlay: rgba(0, 0, 0, 0.4);
+  --toast: #3b3b3b;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+}
+
+:root[data-theme="dark"] {
+  --accent-hover: #4a84f5;
+  --bg: #121212;
+  --pane: #2e2e2e;
+  --surface: #2e2e2e;
+  --hover: #3b3b3b;
+  --selected: #4a4a4a;
+  --border: #3b3b3b;
+  --input: #3b3b3b;
+  --bubble-in: #3b3b3b;
+  --quote-in: #545454;
+  --fg: #e9e9e9;
+  --fg-2: #b9b9b9;
+  --fg-3: #8a8a8a;
+  --danger: #f0635a;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --toast: #4a4a4a;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-bg: var(--bg);
+  --color-pane: var(--pane);
+  --color-surface: var(--surface);
+  --color-hover: var(--hover);
+  --color-selected: var(--selected);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-bubble-in: var(--bubble-in);
+  --color-bubble-out: var(--bubble-out);
+  --color-quote-in: var(--quote-in);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-fg-3: var(--fg-3);
+  --color-danger: var(--danger);
+  --color-online: var(--online);
+  --color-overlay: var(--overlay);
+  --color-toast: var(--toast);
+  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --shadow-pop: var(--shadow);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 20px;
+  overflow: hidden;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Thin, unobtrusive scrollbars like the desktop app. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--fg-3) transparent;
+}
+
+@keyframes typing-dot {
+  0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes flash {
+  0%, 100% { filter: none; }
+  30% { filter: brightness(0.82); }
+}
+
+.animate-shake { animation: shake 0.35s ease-in-out; }
+.animate-pop-in { animation: pop-in 0.14s ease-out; }
+.animate-flash { animation: flash 1.2s ease-in-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
