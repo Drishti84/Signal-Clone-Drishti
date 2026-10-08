@@ -10,6 +10,7 @@ class ReplyPreviewOut(BaseModel):
     id: int
     sender_id: int | None
     body: str
+    deleted: bool
 
 
 class ReactionGroupOut(BaseModel):
@@ -26,6 +27,8 @@ class MessageOut(BaseModel):
     client_id: str | None
     created_at: UtcDateTime
     status: Literal["sent", "delivered", "read"] | None
+    deleted: bool
+    expires_at: UtcDateTime | None
     reply_to: ReplyPreviewOut | None
     reactions: list[ReactionGroupOut]
 

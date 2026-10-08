@@ -145,7 +145,7 @@ def test_reply_must_point_into_the_same_conversation(client):
     original = send(client, ha, conv_id, "original").json()
     reply = send(client, hr, conv_id, "reply", reply_to_id=original["id"]).json()
     assert reply["reply_to"] == {"id": original["id"], "sender_id": original["sender_id"],
-                                 "body": "original"}
+                                 "body": "original", "deleted": False}
     assert send(client, ha, other["id"], "x", reply_to_id=original["id"]).status_code == 400
     assert send(client, ha, conv_id, "x", reply_to_id=99999).status_code == 400
 

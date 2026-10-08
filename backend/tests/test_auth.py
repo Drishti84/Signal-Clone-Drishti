@@ -130,3 +130,25 @@ def test_user_without_a_profile_cannot_chat_yet(client):
         assert response.status_code == 403
         assert response.json() == {"detail": "Finish setting up your profile first"}
     assert client.get("/api/users/me", headers=headers).status_code == 200
+
+
+@pytest.mark.parametrize("raw", ["98765432101", "+91987654321012", "+9198765", "+1 415 555 01234",
+                                 "+65 9123 45678"])
+def test_numbers_of_the_wrong_length_for_their_country_are_rejected(raw):
+    with pytest.raises(BadRequest):
+        normalize_phone(raw)
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("+1 415 555 0123", "+14155550123"),
+    ("+65 9123 4567", "+6591234567"),
+    ("+971 50 123 4567", "+971501234567"),
+    ("+33 6 12 34 56 78", "+33612345678"),  # a country we keep no length for
+])
+def test_numbers_from_other_countries_are_accepted(raw, expected):
+    assert normalize_phone(raw) == expected
+
+
+def test_too_long_number_never_reaches_the_code_step(client):
+    r = client.post("/api/auth/request-otp", json={"phone": "+91987654321012"})
+    assert r.status_code == 422

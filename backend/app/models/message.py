@@ -12,6 +12,10 @@ class Message(Base):
         # Lets a client retry a send safely: same sender + client_id = same message.
         UniqueConstraint("sender_id", "client_id"),
         Index("ix_messages_conversation_id_id", "conversation_id", "id"),
+        # Never hand out an id twice. Without this SQLite reuses the id of a
+        # purged newest message, and read markers and clients rely on ids
+        # only ever growing.
+        {"sqlite_autoincrement": True},
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -24,6 +28,10 @@ class Message(Base):
         ForeignKey("messages.id", ondelete="SET NULL"))
     client_id: Mapped[str | None] = mapped_column(String(36))
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    # "Delete for everyone": the row stays as a tombstone, the text is wiped.
+    deleted_at: Mapped[datetime | None] = mapped_column()
+    # Disappearing messages: the row is removed entirely after this time.
+    expires_at: Mapped[datetime | None] = mapped_column(index=True)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")  # noqa: F821
     reply_to: Mapped["Message | None"] = relationship(remote_side=[id], lazy="joined")

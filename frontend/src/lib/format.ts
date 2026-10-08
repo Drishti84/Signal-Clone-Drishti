@@ -86,6 +86,7 @@ export function previewText(
 ): string {
   if (!message) return "No messages yet";
   if (message.type === "system") return message.body;
+  if (message.deleted) return deletedText(message.sender_id === meId);
   if (message.sender_id === meId) return `You: ${message.body}`;
   if (conversation.type === "group" && message.sender_id !== null) {
     const first = displayName(users[message.sender_id]).split(" ")[0];
@@ -113,4 +114,19 @@ export function composePhone(countryCode: string, typed: string): string {
   // More than 10 digits starting with the code means the code was typed too.
   if (national.length > 10 && national.startsWith(code)) national = national.slice(code.length);
   return `+${code}${national}`;
+}
+
+/** What a deleted message shows in place of its text. */
+export function deletedText(mine: boolean): string {
+  return mine ? "You deleted this message" : "This message was deleted";
+}
+
+/** Why the typed number cannot be right for the chosen country, or null if
+ * it looks fine. A number typed with its own "+" belongs to some other
+ * country, so that one is left for the server to judge. */
+export function phoneProblem(countryCode: string, typed: string, digits: number): string | null {
+  const phone = composePhone(countryCode, typed);
+  if (!phone.startsWith(countryCode)) return null;
+  const national = phone.length - countryCode.length;
+  return national === digits ? null : `Enter a valid ${digits}-digit phone number`;
 }

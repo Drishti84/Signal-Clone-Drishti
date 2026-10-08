@@ -1,6 +1,7 @@
 import re
 
 from app.config import settings
+from app.constants import PHONE_LENGTHS
 from app.errors import BadRequest
 
 
@@ -18,4 +19,11 @@ def normalize_phone(raw: str) -> str:
         cleaned = settings.default_country_code + cleaned
     if not 8 <= len(cleaned) - 1 <= 15:
         raise BadRequest("Enter a valid phone number")
+    # Where we know how long a country's numbers are, hold them to it, so a
+    # mistyped extra digit is caught here and not turned into a new account.
+    for code, length in PHONE_LENGTHS.items():
+        if cleaned.startswith(code):
+            if len(cleaned) - len(code) != length:
+                raise BadRequest(f"Enter a valid {length}-digit phone number")
+            break
     return cleaned

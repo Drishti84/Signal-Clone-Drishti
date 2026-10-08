@@ -38,6 +38,9 @@ To register a new account, enter any phone number and use the code **123456**.
 
 - Emoji reactions (one per person per message, replace or remove)
 - Reply with a quoted message; clicking the quote jumps to the original
+- Disappearing messages: a per-chat timer (30 seconds to 4 weeks); messages sent while it
+  is on are removed for everyone when their time is up
+- Delete for everyone: the sender can remove a message; others see "This message was deleted"
 - Dark mode (System / Light / Dark), remembered per device
 - Responsive layout: two panes on desktop and tablet; on a phone, the chat list and the open
   chat take turns on screen, with the tabs along the bottom
@@ -57,7 +60,7 @@ encryption notice, but messages are stored as plain text.
 | Backend | Python, FastAPI, SQLAlchemy 2, Pydantic v2 |
 | Database | SQLite |
 | Real-time | WebSocket (one connection per browser tab) |
-| Tests | pytest (92 backend tests), Vitest (13 frontend store and helper tests) |
+| Tests | pytest (117 backend tests), Vitest (20 frontend store and helper tests) |
 | Hosting | Vercel (frontend), Render (backend) |
 
 ## Architecture
@@ -163,9 +166,9 @@ Timestamps are stored in UTC. Foreign keys are enforced.
 | `user_avatars` | `user_id` (PK, FK), `content_type`, `data` (blob) | One optional photo per user |
 | `sessions` | `user_id` (FK), `token` (unique), `expires_at` | One row per login; expires after 30 days |
 | `contacts` | `owner_id` (FK), `contact_id` (FK) | Unique per pair; one-directional, as in Signal |
-| `conversations` | `type` (`direct`/`group`), `name`, `avatar_color`, `created_by` (FK), `direct_key` (unique), `last_message_at` (indexed) | |
-| `conversation_members` | `conversation_id` (FK), `user_id` (FK), `role` (`admin`/`member`), `last_read_message_id` (FK), `joined_at` | Unique per (conversation, user) |
-| `messages` | `conversation_id` (FK), `sender_id` (FK, null for system lines), `type` (`text`/`system`), `body`, `reply_to_id` (FK), `client_id` | Indexed on (conversation, id); unique on (sender, client_id) |
+| `conversations` | `type` (`direct`/`group`), `name`, `avatar_color`, `created_by` (FK), `direct_key` (unique), `last_message_at` (indexed), `disappearing_seconds` | Timer is empty when disappearing messages are off |
+| `conversation_members` | `conversation_id` (FK), `user_id` (FK), `role` (`admin`/`member`), `last_read_message_id`, `joined_at` | Unique per (conversation, user) |
+| `messages` | `conversation_id` (FK), `sender_id` (FK, null for system lines), `type` (`text`/`system`), `body`, `reply_to_id` (FK), `client_id`, `deleted_at`, `expires_at` (indexed) | Indexed on (conversation, id); unique on (sender, client_id); ids are never reused |
 | `message_receipts` | `message_id` (FK), `user_id` (FK), `delivered_at`, `read_at` | Unique per (message, user) |
 | `reactions` | `message_id` (FK), `user_id` (FK), `emoji` | Unique per (message, user) |
 
@@ -181,6 +184,14 @@ Timestamps are stored in UTC. Foreign keys are enforced.
   (`sent` → `delivered` when every row has `delivered_at` → `read` when every row has `read_at`).
 - **`conversation_members.last_read_message_id`** makes an unread count a simple count of
   messages after the marker, with no per-message bookkeeping, and the marker only moves forward.
+  It is a high-water mark and deliberately not a foreign key, so it stays valid when the
+  message it names expires. For the same reason message ids are `AUTOINCREMENT`: SQLite would
+  otherwise hand a purged message's id to the next message, which the marker would count as read.
+- **Two kinds of removal, stored differently.** "Delete for everyone" keeps the row as a
+  tombstone (`deleted_at` set, text and reactions wiped), because the chat should still show
+  that something was said. A disappearing message has `expires_at` and is deleted outright by
+  a background sweep, taking its receipts and reactions with it through cascades; queries also
+  filter on `expires_at`, so nothing expired is ever served in the second before the sweep runs.
 - **`messages.client_id`** with a unique constraint per sender makes sending idempotent.
 - **`user_avatars` is a separate table** with the image bytes loaded lazily, so listing users
   never reads image data. `users.avatar_version` goes into the image URL so a new photo shows
@@ -230,6 +241,7 @@ served at `/docs` on the backend.
 | POST | `/conversations/{id}/members` | Add members (admin) |
 | DELETE | `/conversations/{id}/members/{user_id}` | Remove a member (admin) or leave (yourself) |
 | PATCH | `/conversations/{id}/members/{user_id}` | Promote or demote (admin) |
+| PATCH | `/conversations/{id}/disappearing` | Set or clear the disappearing-message timer (any member) |
 | POST | `/conversations/{id}/read` | Mark read up to a message |
 
 **Messages**
@@ -239,6 +251,7 @@ served at `/docs` on the backend.
 | GET | `/conversations/{id}/messages?before=&limit=` | One page of history, oldest first |
 | POST | `/conversations/{id}/messages` | Send (`body`, `client_id`, optional `reply_to_id`) |
 | PUT / DELETE | `/messages/{id}/reaction` | Set or remove my reaction |
+| DELETE | `/messages/{id}` | Delete for everyone (sender only) |
 
 **WebSocket** `/ws?token=<session token>`. Frames are `{ "type": ..., "data": ... }`.
 
@@ -246,6 +259,8 @@ served at `/docs` on the backend.
 |---|---|
 | `message.new` | A message was saved |
 | `message.status` | A message of mine became delivered or read |
+| `message.updated` | A message was deleted for everyone |
+| `message.expired` | Disappearing messages reached their time and were removed |
 | `message.reaction` | A reaction was set or removed |
 | `conversation.new` / `conversation.updated` / `conversation.removed` | A group was created, changed, or I was removed |
 | `conversation.read` | Another of my tabs read a chat |
@@ -295,6 +310,7 @@ Open http://localhost:3000. Run the frontend tests with `npm test`.
 | Backend | `SEED_ON_STARTUP` | `true` | Seed demo data when the database is empty |
 | Backend | `CORS_ORIGIN_REGEX` | unset | Optional pattern for extra origins, such as preview deployments |
 | Backend | `DEFAULT_COUNTRY_CODE` | `+91` | Added to bare 10-digit numbers |
+| Backend | `EXPIRY_SWEEP_SECONDS` | `1` | How often expired messages are removed (0 turns it off) |
 | Frontend | `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend address |
 | Frontend | `NEXT_PUBLIC_WS_URL` | derived from the API URL | WebSocket address |
 
@@ -325,6 +341,14 @@ read, delivered and unsent states, so every badge and check mark has something t
 - **Browser shortcuts win.** Signal Desktop uses `Ctrl+N` for a new chat; a web page cannot
   take that key from the browser, so this app uses `Alt+N` and similar combinations.
 - **A bare 10-digit number is treated as Indian** (`+91`). Other countries need the country code.
+  Numbers for the six countries on the sign-up form must have the right number of digits.
+- **A disappearing message's timer starts when it is sent**, for everyone at once. Signal starts
+  it per recipient when they read the message; this is simpler and needs no per-person state.
+  System lines such as "Asha set disappearing messages to 5 minutes" do not disappear.
+- **Only the sender can delete a message for everyone**, at any time; Signal limits this to a
+  window after sending.
+- **Reactions are one per person.** Two different emoji on a message, or a count of 2, means
+  two people reacted; hover a reaction to see who.
 - **A group message is "read" only when everyone has read it**, and a person removed from a
   group loses access to it entirely. Someone added to a group can read its earlier messages,
   which do not count as unread for them.
@@ -333,6 +357,6 @@ read, delivered and unsent states, so every badge and check mark has something t
 
 ## What I would add next
 
-Attachments, functional disappearing messages, message editing and deletion, catching up on
+Attachments, message editing, catching up on
 more than one page of missed messages after a long disconnect, and a persistent database with
 a shared pub/sub layer for multiple backend instances.

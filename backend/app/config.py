@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     default_country_code: str = "+91"
     # Optional pattern for extra allowed origins, e.g. preview deployments.
     cors_origin_regex: str | None = None
+    # How often expired disappearing messages are removed. 0 turns it off.
+    expiry_sweep_seconds: float = 1.0
 
     @property
     def cors_origin_list(self) -> list[str]:

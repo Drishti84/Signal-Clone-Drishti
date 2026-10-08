@@ -20,6 +20,10 @@ type MessagesState = {
   applyNew: (message: Message) => void;
   applyStatus: (conversationId: number, messageIds: number[], status: MessageStatus) => void;
   applyReactions: (conversationId: number, messageId: number, reactions: ReactionGroup[]) => void;
+  /** A message changed in place (for now: it was deleted for everyone). */
+  applyUpdated: (message: Message) => void;
+  /** Disappearing messages whose time is up. */
+  applyExpired: (conversationId: number, messageIds: number[]) => void;
   clearUnreadDivider: (conversationId: number) => void;
   reset: () => void;
 };
@@ -162,6 +166,7 @@ export const useMessages = create<MessagesState>((set, get) => {
     send: (conversationId, body, replyTo) => {
       const me = useAuth.getState().user;
       if (!me) return;
+      const timer = useConversations.getState().byId[conversationId]?.disappearing_seconds;
       // Shown immediately as "sending"; the server's copy replaces it by client_id.
       const optimistic: Message = {
         id: --temporaryId,
@@ -172,8 +177,16 @@ export const useMessages = create<MessagesState>((set, get) => {
         client_id: crypto.randomUUID(),
         created_at: new Date().toISOString(),
         status: "sending",
+        deleted: false,
+        // Shown at once with its timer icon; the server sets the real time.
+        expires_at: timer ? new Date(Date.now() + timer * 1000).toISOString() : null,
         reply_to: replyTo
-          ? { id: replyTo.id, sender_id: replyTo.sender_id, body: replyTo.body.slice(0, 200) }
+          ? {
+              id: replyTo.id,
+              sender_id: replyTo.sender_id,
+              body: replyTo.body.slice(0, 200),
+              deleted: replyTo.deleted,
+            }
           : null,
         reactions: [],
       };
@@ -256,6 +269,38 @@ export const useMessages = create<MessagesState>((set, get) => {
       replace(conversationId, (messages) =>
         messages.map((m) => (m.id === messageId ? { ...m, reactions } : m)),
       ),
+
+    applyUpdated: (message) => {
+      replace(message.conversation_id, (messages) =>
+        messages.map((m) =>
+          m.id === message.id ? { ...message, status: later(m.status, message.status) } : m,
+        ),
+      );
+      const conversations = useConversations.getState();
+      const last = conversations.byId[message.conversation_id]?.last_message;
+      if (last?.id === message.id) {
+        conversations.patch(message.conversation_id, { last_message: message });
+      }
+    },
+
+    applyExpired: (conversationId, messageIds) => {
+      const gone = new Set(messageIds);
+      replace(conversationId, (messages) =>
+        messages
+          .filter((m) => !gone.has(m.id))
+          // A reply to an expired message keeps its text but loses the quote.
+          .map((m) => (m.reply_to && gone.has(m.reply_to.id) ? { ...m, reply_to: null } : m)),
+      );
+      const conversations = useConversations.getState();
+      const conversation = conversations.byId[conversationId];
+      if (!conversation) return;
+      // The preview or the unread badge may have been about a message that
+      // is gone now; the server knows what the chat looks like without it.
+      const previewGone = !!conversation.last_message && gone.has(conversation.last_message.id);
+      if (previewGone || conversation.unread_count > 0) {
+        void conversations.refresh(conversationId).catch(() => undefined);
+      }
+    },
 
     clearUnreadDivider: (conversationId) =>
       set((state) =>

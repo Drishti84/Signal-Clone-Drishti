@@ -4,7 +4,7 @@ from sqlalchemy.orm import contains_eager
 
 from app.constants import AVATAR_COLORS
 from app.errors import BadRequest, Forbidden, NotFound
-from app.models import Conversation, ConversationMember, Message, User
+from app.models import Conversation, ConversationMember, Message, User, utcnow
 
 
 def get_member(db: Db, conversation_id: int, user_id: int) -> ConversationMember:
@@ -67,9 +67,16 @@ def add_system_message(db: Db, conv: Conversation, body: str) -> Message:
     return msg
 
 
+def not_expired():
+    """Filter that hides disappearing messages whose time is up, in the
+    short gap before the purge removes them for good."""
+    return or_(Message.expires_at.is_(None), Message.expires_at > utcnow())
+
+
 def _is_unread():
     """Filter for messages a joined ConversationMember row has not read yet."""
     return and_(
+        not_expired(),
         Message.type == "text",
         Message.sender_id != ConversationMember.user_id,
         or_(ConversationMember.last_read_message_id.is_(None),
@@ -87,7 +94,8 @@ def unread_count(db: Db, member: ConversationMember) -> int:
 
 
 def last_message(db: Db, conversation_id: int) -> Message | None:
-    return db.scalar(select(Message).where(Message.conversation_id == conversation_id)
+    return db.scalar(select(Message)
+                     .where(Message.conversation_id == conversation_id, not_expired())
                      .order_by(Message.id.desc()).limit(1))
 
 
@@ -106,7 +114,7 @@ def list_for_user(db: Db, me: User) -> list[tuple[Conversation, Message | None, 
         return []
 
     newest_ids = (select(func.max(Message.id))
-                  .where(Message.conversation_id.in_(conv_ids))
+                  .where(Message.conversation_id.in_(conv_ids), not_expired())
                   .group_by(Message.conversation_id))
     newest = {msg.conversation_id: msg
               for msg in db.scalars(select(Message).where(Message.id.in_(newest_ids)))}

@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session as Db
 
-from app.errors import NotFound
+from app.errors import BadRequest, NotFound
 from app.models import Message, Reaction, User
 from app.realtime.events import Event
 from app.services.conversations import get_member, member_ids
@@ -28,6 +28,8 @@ def _changed(db: Db, msg: Message, audience: list[int]) -> tuple[Message, list[E
 def set_reaction(db: Db, me: User, message_id: int, emoji: str) -> tuple[Message, list[Event]]:
     """One reaction per user per message: a second one replaces the first."""
     msg, audience = _load(db, me, message_id)
+    if msg.deleted_at is not None:
+        raise BadRequest("This message was deleted")
     mine = next((r for r in msg.reactions if r.user_id == me.id), None)
     if mine is None:
         db.add(Reaction(message_id=msg.id, user_id=me.id, emoji=emoji))

@@ -6,9 +6,9 @@ from app.deps import get_profiled_user
 from app.models import Conversation, User
 from app.realtime.events import Event
 from app.realtime.manager import manager
-from app.schemas.conversation import (AddMembersIn, ConversationOut, DirectIn, GroupIn,
-                                      GroupNameIn, RoleIn)
-from app.services import conversations, members
+from app.schemas.conversation import (AddMembersIn, ConversationOut, DirectIn,
+                                      DisappearingIn, GroupIn, GroupNameIn, RoleIn)
+from app.services import conversations, disappearing, members
 from app.services.serializers import conversation_out
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
@@ -96,4 +96,12 @@ def set_role(conversation_id: int, user_id: int, body: RoleIn, background: Backg
              me: User = Depends(get_profiled_user), db: Db = Depends(get_db)):
     result = members.set_role(db, me, conversation_id, user_id, body.role,
                               manager.online_ids())
+    return _finish(db, result, me, background)
+
+
+@router.patch("/{conversation_id}/disappearing", response_model=ConversationOut)
+def set_disappearing(conversation_id: int, body: DisappearingIn, background: BackgroundTasks,
+                     me: User = Depends(get_profiled_user), db: Db = Depends(get_db)):
+    """Set or clear the disappearing-message timer. Open to every member."""
+    result = disappearing.set_timer(db, me, conversation_id, body.seconds, manager.online_ids())
     return _finish(db, result, me, background)

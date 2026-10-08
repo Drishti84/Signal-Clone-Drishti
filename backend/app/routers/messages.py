@@ -62,3 +62,13 @@ def remove_reaction(message_id: int, background: BackgroundTasks,
     db.commit()
     background.add_task(manager.dispatch, events)
     return message_out(msg)
+
+
+@router.delete("/messages/{message_id}", response_model=MessageOut)
+def delete_message(message_id: int, background: BackgroundTasks,
+                   me: User = Depends(get_profiled_user), db: Db = Depends(get_db)):
+    """Delete for everyone. Only the sender may do this."""
+    msg, events = messages.delete_message(db, me, message_id)
+    db.commit()
+    background.add_task(manager.dispatch, events)
+    return message_out(msg)

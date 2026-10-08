@@ -1,14 +1,15 @@
 "use client";
 
-import { Copy, MoreHorizontal, Reply, Smile } from "lucide-react";
+import { Ban, Copy, MoreHorizontal, Reply, Smile, Timer, Trash2 } from "lucide-react";
 import { memo, useRef, useState, type CSSProperties } from "react";
 
 import { StatusIcon } from "@/components/chat/StatusIcon";
-import { Menu } from "@/components/ui/Menu";
+import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { Menu, type MenuItem } from "@/components/ui/Menu";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { api, errorMessage } from "@/lib/api";
 import { AVATAR_COLORS, REACTION_EMOJI } from "@/lib/constants";
-import { bubbleTime, displayName } from "@/lib/format";
+import { bubbleTime, deletedText, displayName } from "@/lib/format";
 import { useDismiss } from "@/lib/hooks";
 import type { Message, ReactionGroup, User } from "@/lib/types";
 import { useMessages } from "@/store/messages";
@@ -26,7 +27,8 @@ type Props = {
 };
 
 /** What the reactions look like after `meId` picks `emoji`: picking the
- * same emoji again removes it, a different one replaces it. */
+ * same emoji again removes it, a different one replaces it. Each person has
+ * at most one reaction, so two chips on a message are two people. */
 function toggled(reactions: ReactionGroup[], meId: number, emoji: string) {
   const had = reactions.find((group) => group.user_ids.includes(meId))?.emoji;
   const without = reactions
@@ -43,18 +45,25 @@ export const MessageBubble = memo(function MessageBubble({
   message, isFirst, isLast, isMine, isGroup, meId, users,
 }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const picker = useRef<HTMLDivElement>(null);
+  const reacting = useRef(false);
   useDismiss(picker, pickerOpen, () => setPickerOpen(false));
 
   const sender = message.sender_id !== null ? users[message.sender_id] : undefined;
   const saved = message.id > 0;
+  const deleted = message.deleted;
   const myReaction = message.reactions.find((group) => group.user_ids.includes(meId))?.emoji;
-  const hasReactions = message.reactions.length > 0;
+  const hasReactions = !deleted && message.reactions.length > 0;
   const showName = isGroup && !isMine && isFirst;
   const senderPalette = AVATAR_COLORS[sender?.avatar.color ?? ""] ?? AVATAR_COLORS.A100;
 
   const react = async (emoji: string) => {
     setPickerOpen(false);
+    // One change at a time: two quick clicks would otherwise race each other
+    // and the server could end up keeping the one clicked first.
+    if (reacting.current) return;
+    reacting.current = true;
     const { next, removed } = toggled(message.reactions, meId, emoji);
     const store = useMessages.getState();
     store.applyReactions(message.conversation_id, message.id, next); // show it right away
@@ -65,6 +74,8 @@ export const MessageBubble = memo(function MessageBubble({
     } catch (error) {
       store.applyReactions(message.conversation_id, message.id, message.reactions);
       useUi.getState().toast(errorMessage(error), "error");
+    } finally {
+      reacting.current = false;
     }
   };
 
@@ -75,10 +86,32 @@ export const MessageBubble = memo(function MessageBubble({
       .catch(() => useUi.getState().toast("Couldn't copy", "error"));
   };
 
+  const deleteForEveryone = async () => {
+    setConfirmingDelete(false);
+    try {
+      const tombstone = await api.del<Message>(`/api/messages/${message.id}`);
+      useMessages.getState().applyUpdated(tombstone);
+    } catch (error) {
+      useUi.getState().toast(errorMessage(error), "error");
+    }
+  };
+
+  const menuItems: MenuItem[] = [{ label: "Copy text", icon: <Copy size={15} />, onSelect: copy }];
+  if (isMine) {
+    menuItems.push({
+      label: "Delete for everyone",
+      icon: <Trash2 size={15} />,
+      danger: true,
+      onSelect: () => setConfirmingDelete(true),
+    });
+  }
+
   // The corners that touch the next bubble in the same run are tightened.
   const corners = isMine
     ? `${isFirst ? "rounded-tr-[18px]" : "rounded-tr-[4px]"} ${isLast ? "rounded-br-[18px]" : "rounded-br-[4px]"} rounded-l-[18px]`
     : `${isFirst ? "rounded-tl-[18px]" : "rounded-tl-[4px]"} ${isLast ? "rounded-bl-[18px]" : "rounded-bl-[4px]"} rounded-r-[18px]`;
+
+  const quoted = message.reply_to;
 
   return (
     <div
@@ -103,31 +136,44 @@ export const MessageBubble = memo(function MessageBubble({
             </div>
           )}
 
-          {message.reply_to && (
+          {quoted && !deleted && (
             <button
               type="button"
-              onClick={() => useUi.getState().jumpToMessage(message.reply_to!.id)}
+              onClick={() => useUi.getState().jumpToMessage(quoted.id)}
               className={`mb-1.5 block w-full rounded-lg border-l-4 px-2 py-1 text-left text-[13px] ${isMine ? "border-white bg-white/20" : "border-accent bg-quote-in"}`}
             >
               <span className="block font-semibold">
-                {message.reply_to.sender_id === meId
+                {quoted.sender_id === meId
                   ? "You"
-                  : displayName(message.reply_to.sender_id !== null ? users[message.reply_to.sender_id] : null)}
+                  : displayName(quoted.sender_id !== null ? users[quoted.sender_id] : null)}
               </span>
-              <span className="line-clamp-2 opacity-90 [overflow-wrap:anywhere]">{message.reply_to.body}</span>
+              <span className={`line-clamp-2 opacity-90 [overflow-wrap:anywhere] ${quoted.deleted ? "italic" : ""}`}>
+                {quoted.deleted ? "Deleted message" : quoted.body}
+              </span>
             </button>
           )}
 
           <div className="flex flex-wrap items-end justify-end gap-x-2">
-            <span className="mr-auto min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
-              {message.body}
-            </span>
+            {deleted ? (
+              <span className="mr-auto flex min-w-0 items-center gap-1.5 italic opacity-80">
+                <Ban size={14} className="shrink-0" /> {deletedText(isMine)}
+              </span>
+            ) : (
+              <span className="mr-auto min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
+                {message.body}
+              </span>
+            )}
             <span
               className={`flex shrink-0 translate-y-[2px] items-center gap-1 text-[11px] leading-4 ${isMine ? "text-white/80" : "text-fg-2"}`}
               style={{ "--status-gap": "var(--bubble-out)" } as CSSProperties}
             >
+              {message.expires_at && !deleted && (
+                <span title="Disappearing message" className="flex">
+                  <Timer size={11} aria-label="Disappearing message" />
+                </span>
+              )}
               {bubbleTime(message.created_at)}
-              {isMine && message.status && <StatusIcon status={message.status} />}
+              {isMine && message.status && !deleted && <StatusIcon status={message.status} />}
             </span>
           </div>
         </div>
@@ -136,14 +182,16 @@ export const MessageBubble = memo(function MessageBubble({
           <div className={`absolute -bottom-4 flex gap-1 ${isMine ? "right-2" : "left-2"}`}>
             {message.reactions.map((group) => {
               const mine = group.user_ids.includes(meId);
+              const names = group.user_ids
+                .map((id) => (id === meId ? "You" : displayName(users[id])))
+                .join(", ");
               return (
                 <button
                   key={group.emoji}
                   type="button"
                   onClick={() => void react(group.emoji)}
-                  title={group.user_ids
-                    .map((id) => (id === meId ? "You" : displayName(users[id])))
-                    .join(", ")}
+                  aria-label={`${group.emoji} from ${names}`}
+                  title={`${names}${mine ? " (click to remove yours)" : " (click to react the same way)"}`}
                   className={`flex h-6 items-center gap-1 rounded-full border-2 border-bg px-1.5 text-[13px] leading-none ${mine ? "bg-accent/25 ring-1 ring-accent" : "bg-hover"}`}
                 >
                   <span>{group.emoji}</span>
@@ -173,7 +221,7 @@ export const MessageBubble = memo(function MessageBubble({
         )}
       </div>
 
-      {saved && (
+      {saved && !deleted && (
         <div
           ref={picker}
           className={`relative flex shrink-0 items-center gap-0.5 self-center transition-opacity focus-within:opacity-100 group-hover/message:opacity-100 ${pickerOpen ? "opacity-100" : "opacity-0"} ${isMine ? "flex-row-reverse" : ""}`}
@@ -190,7 +238,7 @@ export const MessageBubble = memo(function MessageBubble({
             trigger={(toggle) => (
               <ActionButton label="More" onClick={toggle}><MoreHorizontal size={17} /></ActionButton>
             )}
-            items={[{ label: "Copy text", icon: <Copy size={15} />, onSelect: copy }]}
+            items={menuItems}
           />
 
           {pickerOpen && (
@@ -214,6 +262,17 @@ export const MessageBubble = memo(function MessageBubble({
             </div>
           )}
         </div>
+      )}
+
+      {confirmingDelete && (
+        <ConfirmDialog
+          title="Delete for everyone?"
+          message="This message will be removed for everyone in the chat. They will see that a message was deleted."
+          confirmLabel="Delete"
+          danger
+          onConfirm={() => void deleteForEveryone()}
+          onCancel={() => setConfirmingDelete(false)}
+        />
       )}
     </div>
   );

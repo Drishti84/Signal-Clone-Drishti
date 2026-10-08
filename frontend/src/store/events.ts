@@ -15,6 +15,14 @@ export function handleServerEvent(event: ServerEvent): void {
       useMessages.getState().applyNew(event.data.message);
       break;
 
+    case "message.updated":
+      useMessages.getState().applyUpdated(event.data.message);
+      break;
+
+    case "message.expired":
+      useMessages.getState().applyExpired(event.data.conversation_id, event.data.message_ids);
+      break;
+
     case "message.status":
       useMessages
         .getState()

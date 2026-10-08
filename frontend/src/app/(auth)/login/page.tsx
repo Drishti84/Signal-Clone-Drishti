@@ -11,20 +11,11 @@ import { SignalLogo } from "@/components/ui/SignalLogo";
 import { Spinner } from "@/components/ui/Spinner";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { api, errorMessage } from "@/lib/api";
-import { DEMO_OTP, NAME_MAX_LENGTH } from "@/lib/constants";
-import { composePhone, formatPhone } from "@/lib/format";
+import { COUNTRIES, DEMO_OTP, NAME_MAX_LENGTH } from "@/lib/constants";
+import { composePhone, formatPhone, phoneProblem } from "@/lib/format";
 import { draftFromUser, saveProfile, type AvatarDraft } from "@/lib/profile";
 import type { User, VerifyResponse } from "@/lib/types";
 import { useAuth } from "@/store/auth";
-
-const COUNTRY_CODES = [
-  { code: "+91", label: "India (+91)" },
-  { code: "+1", label: "United States (+1)" },
-  { code: "+44", label: "United Kingdom (+44)" },
-  { code: "+61", label: "Australia (+61)" },
-  { code: "+65", label: "Singapore (+65)" },
-  { code: "+971", label: "UAE (+971)" },
-];
 
 // The free hosting tier sleeps when idle; tell people why the first tap is slow.
 const SLOW_AFTER_MS = 3000;
@@ -106,6 +97,13 @@ export default function LoginPage() {
 
   const submitPhone = (event: FormEvent) => {
     event.preventDefault();
+    // Catch a wrong-length number here, before any code is "sent".
+    const country = COUNTRIES.find((entry) => entry.code === countryCode);
+    const problem = country ? phoneProblem(countryCode, number, country.digits) : null;
+    if (problem) {
+      setError(problem);
+      return;
+    }
     void run(async () => {
       await api.post("/api/auth/request-otp", { phone });
       setCode("");
@@ -193,7 +191,7 @@ export default function LoginPage() {
                   onChange={(event) => setCountryCode(event.target.value)}
                   className="h-10 rounded-lg border border-border bg-bg px-2 outline-none focus:border-accent"
                 >
-                  {COUNTRY_CODES.map((country) => (
+                  {COUNTRIES.map((country) => (
                     <option key={country.code} value={country.code}>{country.label}</option>
                   ))}
                 </select>

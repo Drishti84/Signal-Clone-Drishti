@@ -44,7 +44,7 @@ def _snapshot(conv: Conversation, last: Message, online: set[int]) -> dict:
     return conversation_out(conv, last, 0, online)
 
 
-def _announce(db: Db, conv: Conversation, bodies: list[str], online: set[int],
+def announce(db: Db, conv: Conversation, bodies: list[str], online: set[int],
               new_user_ids: list[int] = ()) -> list[Event]:
     """Write one system line per change, then tell the members. People who
     just joined get `conversation.new`; everyone else `conversation.updated`."""
@@ -66,7 +66,7 @@ def rename(db: Db, me: User, conversation_id: int, name: str, online: set[int]) 
     if conv.name == name:
         return conv, []
     conv.name = name
-    return conv, _announce(db, conv, [f"{me.display_name} renamed the group to {name}"], online)
+    return conv, announce(db, conv, [f"{me.display_name} renamed the group to {name}"], online)
 
 
 def add_members(db: Db, me: User, conversation_id: int, user_ids: list[int],
@@ -84,7 +84,7 @@ def add_members(db: Db, me: User, conversation_id: int, user_ids: list[int],
     for user in users:
         conv.members.append(ConversationMember(user_id=user.id, last_read_message_id=newest))
     bodies = [f"{me.display_name} added {user.display_name}" for user in users]
-    return conv, _announce(db, conv, bodies, online, new_user_ids=new_ids)
+    return conv, announce(db, conv, bodies, online, new_user_ids=new_ids)
 
 
 def remove_member(db: Db, me: User, conversation_id: int, target_id: int,
@@ -112,7 +112,7 @@ def remove_member(db: Db, me: User, conversation_id: int, target_id: int,
     if not any(member.role == "admin" for member in conv.members):
         conv.members[0].role = "admin"  # members are ordered longest-standing first
     body = f"{name} left the group" if leaving else f"{me.display_name} removed {name}"
-    return conv, [removed] + freed + _announce(db, conv, [body], online)
+    return conv, [removed] + freed + announce(db, conv, [body], online)
 
 
 def set_role(db: Db, me: User, conversation_id: int, target_id: int, role: str,
@@ -128,4 +128,4 @@ def set_role(db: Db, me: User, conversation_id: int, target_id: int, role: str,
     name = target.user.display_name
     body = (f"{me.display_name} made {name} an admin" if role == "admin"
             else f"{name} is no longer an admin")
-    return conv, _announce(db, conv, [body], online)
+    return conv, announce(db, conv, [body], online)

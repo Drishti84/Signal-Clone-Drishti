@@ -44,3 +44,25 @@ export const SOCKET_UNAUTHENTICATED = 4401;
 
 // Messages from one sender closer together than this share a bubble group.
 export const GROUP_WINDOW_MS = 3 * 60_000;
+
+// Country codes offered at sign-up, with how many digits follow the code.
+export const COUNTRIES = [
+  { code: "+91", label: "India (+91)", digits: 10 },
+  { code: "+1", label: "United States (+1)", digits: 10 },
+  { code: "+44", label: "United Kingdom (+44)", digits: 10 },
+  { code: "+61", label: "Australia (+61)", digits: 9 },
+  { code: "+65", label: "Singapore (+65)", digits: 8 },
+  { code: "+971", label: "UAE (+971)", digits: 9 },
+];
+
+// Disappearing-message timers, matching the backend's list.
+export const DISAPPEARING_OPTIONS: { seconds: number | null; label: string; short: string }[] = [
+  { seconds: null, label: "Off", short: "" },
+  { seconds: 30, label: "30 seconds", short: "30s" },
+  { seconds: 300, label: "5 minutes", short: "5m" },
+  { seconds: 3600, label: "1 hour", short: "1h" },
+  { seconds: 28800, label: "8 hours", short: "8h" },
+  { seconds: 86400, label: "1 day", short: "1d" },
+  { seconds: 604800, label: "1 week", short: "1w" },
+  { seconds: 2419200, label: "4 weeks", short: "4w" },
+];

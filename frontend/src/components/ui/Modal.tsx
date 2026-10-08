@@ -18,18 +18,26 @@ type Props = {
 /** A centred dialog. Closes on Escape and on a click outside it. */
 export function Modal({ title, onClose, onBack, width = 400, children, footer }: Props) {
   const panel = useRef<HTMLDivElement>(null);
+  // Callers pass a new onClose function on every render. Keeping it in a ref
+  // lets the effect below run once, when the dialog opens. (It used to re-run
+  // on every keystroke and pull focus out of the field being typed in.)
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  });
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onClose();
+        close.current();
       }
     };
     window.addEventListener("keydown", onKey);
-    panel.current?.focus();
+    // Focus the dialog itself only if nothing inside it asked for focus.
+    if (!panel.current?.contains(document.activeElement)) panel.current?.focus();
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, []);
 
   return (
     <div

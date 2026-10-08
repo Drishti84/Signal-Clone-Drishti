@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowLeft, Info, Phone, Search, Video } from "lucide-react";
+import { ArrowLeft, Info, Phone, Search, Timer, Video } from "lucide-react";
 
 import { Avatar } from "@/components/ui/Avatar";
 import { IconButton } from "@/components/ui/IconButton";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { selectConversation } from "@/lib/actions";
+import { DISAPPEARING_OPTIONS } from "@/lib/constants";
 import { conversationTitle, displayName, lastSeen, otherMember } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
 import type { Conversation } from "@/lib/types";
@@ -27,6 +28,10 @@ export function ChatHeader({ conversation, meId }: Props) {
   const stored = otherMember(conversation, meId);
   const other = stored ? (users[stored.id] ?? stored) : null;
   const typingIds = typingUserIds(typing, conversation.id).filter((id) => id !== meId);
+
+  const timer = DISAPPEARING_OPTIONS.find(
+    (option) => option.seconds !== null && option.seconds === conversation.disappearing_seconds,
+  );
 
   let subtitle: string;
   if (typingIds.length > 0) {
@@ -61,8 +66,16 @@ export function ChatHeader({ conversation, meId }: Props) {
           <span className="block truncate text-[15px] font-semibold leading-5">
             {conversationTitle(conversation, meId, users)}
           </span>
-          <span className={`block truncate text-xs ${typingIds.length ? "text-accent" : "text-fg-2"}`}>
-            {subtitle}
+          <span className={`flex items-center gap-1 truncate text-xs ${typingIds.length ? "text-accent" : "text-fg-2"}`}>
+            <span className="truncate">{subtitle}</span>
+            {timer && (
+              <span
+                className="flex shrink-0 items-center gap-0.5 text-fg-2"
+                title={`Disappearing messages: ${timer.label}`}
+              >
+                · <Timer size={12} /> {timer.short}
+              </span>
+            )}
           </span>
         </span>
       </button>

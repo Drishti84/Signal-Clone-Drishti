@@ -17,6 +17,8 @@ class Conversation(Base):
     # "<lowId>:<highId>" for direct chats; guarantees one chat per pair.
     direct_key: Mapped[str | None] = mapped_column(String(32), unique=True)
     last_message_at: Mapped[datetime] = mapped_column(default=utcnow, index=True)
+    # When set, new messages in this chat delete themselves after this long.
+    disappearing_seconds: Mapped[int | None] = mapped_column()
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
     # Ordered oldest member first; the id breaks ties between members added together.
@@ -37,8 +39,9 @@ class ConversationMember(Base):
         ForeignKey("conversations.id", ondelete="CASCADE"), index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     role: Mapped[str] = mapped_column(String(8), default="member")  # "admin" | "member"
-    last_read_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("messages.id", ondelete="SET NULL"))
+    # A high-water mark, not a reference: everything up to this id is read.
+    # Deliberately not a foreign key, so it survives that message expiring.
+    last_read_message_id: Mapped[int | None] = mapped_column()
     joined_at: Mapped[datetime] = mapped_column(default=utcnow)
 
     conversation: Mapped[Conversation] = relationship(back_populates="members")

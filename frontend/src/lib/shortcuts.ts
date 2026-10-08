@@ -70,12 +70,14 @@ export function useShortcuts(): void {
       } else if (event.altKey && !mod && code === "ArrowUp") {
         stepConversation(-1);
       } else if (event.key === "Escape" && !event.defaultPrevented) {
-        // Dialogs, menus and the reply bar handle Escape themselves. What is
-        // left: close the details panel, then leave the chat.
+        // Dialogs, menus, pickers and the reply bar handle Escape themselves:
+        // if one is open, this press belongs to it. What is left: close the
+        // details panel, then leave the chat.
         if (ui.dialog !== null || ui.replyTo !== null) return;
+        if (document.querySelector('[role="dialog"], [role="menu"], [data-popover]')) return;
         const target = event.target as HTMLElement | null;
         const typed = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
-        if ((typed && target.value !== "") || document.querySelector('[role="menu"]')) return;
+        if (typed && target.value !== "") return;
         if (ui.detailsOpen) ui.setDetailsOpen(false);
         else if (useConversations.getState().activeId !== null) selectConversation(null);
         else handled = false;
@@ -86,7 +88,9 @@ export function useShortcuts(): void {
       if (handled) event.preventDefault();
     };
 
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Capture phase: this runs before the menus' own Escape handlers, so the
+    // check above still sees a menu that this same key press is about to close.
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 }

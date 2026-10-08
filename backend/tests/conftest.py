@@ -2,6 +2,7 @@ import os
 
 os.environ["DATABASE_URL"] = "sqlite://"
 os.environ["SEED_ON_STARTUP"] = "false"
+os.environ["EXPIRY_SWEEP_SECONDS"] = "0"  # tests run the purge themselves
 
 import pytest
 from fastapi.testclient import TestClient

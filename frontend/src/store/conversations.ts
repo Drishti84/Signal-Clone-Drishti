@@ -17,6 +17,8 @@ type ConversationsState = {
   setActive: (id: number | null) => void;
   /** Fetch a conversation we have heard about but not loaded yet. */
   ensure: (id: number) => Promise<void>;
+  /** Re-read one conversation from the server (its preview and unread count). */
+  refresh: (id: number) => Promise<void>;
   reset: () => void;
 };
 
@@ -92,6 +94,11 @@ export const useConversations = create<ConversationsState>((set, get) => ({
       inFlight.set(id, pending);
     }
     return pending;
+  },
+
+  refresh: async (id) => {
+    const conversation = await api.get<Conversation>(`/api/conversations/${id}`);
+    if (get().byId[id]) get().upsert(conversation);
   },
 
   reset: () => set({ byId: {}, activeId: null, loaded: false }),

@@ -22,12 +22,13 @@ const user = (id: number): User => ({
 const message = (id: number, sender: number, extra: Partial<Message> = {}): Message => ({
   id, conversation_id: CHAT, sender_id: sender, type: "text", body: `m${id}`,
   client_id: `client-${id}`, created_at: new Date(2026, 0, 1, 10, id).toISOString(),
-  status: "sent", reply_to: null, reactions: [], ...extra,
+  status: "sent", deleted: false, expires_at: null, reply_to: null, reactions: [], ...extra,
 });
 
 const conversation = (extra: Partial<Conversation> = {}): Conversation => ({
   id: CHAT, type: "direct", name: null, avatar_color: null, created_by: ME,
-  last_message_at: new Date(2026, 0, 1).toISOString(), last_message: null, unread_count: 0,
+  last_message_at: new Date(2026, 0, 1).toISOString(), disappearing_seconds: null,
+  last_message: null, unread_count: 0,
   members: [ME, OTHER].map((id) => ({ user: user(id), role: "member", joined_at: "" })),
   ...extra,
 });
@@ -124,5 +125,38 @@ describe("sending", () => {
     await useMessages.getState().loadLatest(CHAT);
     useMessages.getState().applyStatus(CHAT, [5], "delivered");
     expect(useMessages.getState().byConversation[CHAT][0].status).toBe("read");
+  });
+});
+
+describe("deleting and expiring", () => {
+  it("turns a deleted message into a tombstone in place", async () => {
+    api.get.mockResolvedValueOnce({ messages: [message(5, OTHER), message(6, OTHER)], has_more: false });
+    await useMessages.getState().loadLatest(CHAT);
+    useConversations.getState().patch(CHAT, { last_message: message(6, OTHER) });
+    useMessages.getState().applyUpdated(message(6, OTHER, { body: "", deleted: true }));
+    const list = useMessages.getState().byConversation[CHAT];
+    expect(list.map((m) => m.id)).toEqual([5, 6]);
+    expect(list[1].deleted).toBe(true);
+    expect(useConversations.getState().byId[CHAT].last_message?.deleted).toBe(true);
+  });
+
+  it("removes expired messages and refreshes the chat row when the newest one went", async () => {
+    api.get.mockResolvedValueOnce({ messages: [message(5, OTHER), message(6, OTHER)], has_more: false });
+    await useMessages.getState().loadLatest(CHAT);
+    useConversations.getState().patch(CHAT, { last_message: message(6, OTHER) });
+    api.get.mockResolvedValueOnce(conversation({ last_message: message(5, OTHER) }));
+    useMessages.getState().applyExpired(CHAT, [6]);
+    expect(useMessages.getState().byConversation[CHAT].map((m) => m.id)).toEqual([5]);
+    await vi.waitFor(() => expect(useConversations.getState().byId[CHAT].last_message?.id).toBe(5));
+    expect(api.get).toHaveBeenLastCalledWith(`/api/conversations/${CHAT}`);
+  });
+
+  it("gives a message sent while a timer is on an expiry straight away", async () => {
+    useConversations.getState().patch(CHAT, { disappearing_seconds: 30 });
+    api.get.mockResolvedValueOnce({ messages: [], has_more: false });
+    await useMessages.getState().loadLatest(CHAT);
+    api.post.mockImplementationOnce(() => new Promise(() => undefined));
+    useMessages.getState().send(CHAT, "soon gone");
+    expect(useMessages.getState().byConversation[CHAT][0].expires_at).toEqual(expect.any(String));
   });
 });

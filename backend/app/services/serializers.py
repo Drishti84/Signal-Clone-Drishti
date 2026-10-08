@@ -43,8 +43,11 @@ def message_out(msg: Message) -> dict:
         "client_id": msg.client_id,
         "created_at": msg.created_at,
         "status": aggregate_status(msg.receipts) if msg.type == "text" else None,
+        "deleted": msg.deleted_at is not None,
+        "expires_at": msg.expires_at,
         "reply_to": ({"id": reply.id, "sender_id": reply.sender_id,
-                      "body": reply.body[:REPLY_PREVIEW_LENGTH]} if reply else None),
+                      "body": reply.body[:REPLY_PREVIEW_LENGTH],
+                      "deleted": reply.deleted_at is not None} if reply else None),
         "reactions": [{"emoji": emoji, "user_ids": ids} for emoji, ids in grouped.items()],
     }
 
@@ -58,6 +61,7 @@ def conversation_out(conv: Conversation, last_message: Message | None, unread: i
         "avatar_color": conv.avatar_color,
         "created_by": conv.created_by,
         "last_message_at": conv.last_message_at,
+        "disappearing_seconds": conv.disappearing_seconds,
         "last_message": message_out(last_message) if last_message else None,
         "unread_count": unread,
         "members": [{"user": user_out(m.user, online), "role": m.role,

@@ -6,6 +6,7 @@ import {
 import { useEffect, useState, type FormEvent } from "react";
 
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { DisappearingSetting } from "@/components/dialogs/DisappearingSetting";
 import { PeoplePicker } from "@/components/dialogs/PeoplePicker";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -95,6 +96,9 @@ function ContactDetails({ conversation, meId }: Props) {
           {isContact ? "Remove from contacts" : "Add to contacts"}
         </Button>
       )}
+      <div className="mt-2 w-full">
+        <DisappearingSetting conversation={conversation} />
+      </div>
     </div>
   );
 }
@@ -195,7 +199,9 @@ function GroupDetails({ conversation, meId }: Props) {
         </p>
       </div>
 
-      <h4 className="px-5 pb-1 pt-2 text-[13px] font-semibold text-fg-2">Members</h4>
+      <DisappearingSetting conversation={conversation} />
+
+      <h4 className="px-5 pb-1 pt-4 text-[13px] font-semibold text-fg-2">Members</h4>
       {iAmAdmin && (
         <div className="px-3">
           <button

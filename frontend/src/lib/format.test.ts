@@ -24,3 +24,37 @@ describe("composePhone", () => {
     expect(composePhone("+91", "9198765432")).toBe("+919198765432");
   });
 });
+
+import { phoneProblem, previewText } from "@/lib/format";
+import type { Conversation, Message } from "@/lib/types";
+
+describe("phoneProblem", () => {
+  it("accepts a number of the right length for the country", () => {
+    expect(phoneProblem("+91", "98765 43210", 10)).toBeNull();
+    expect(phoneProblem("+91", "098765 43210", 10)).toBeNull();
+    expect(phoneProblem("+91", "+91 98765 43210", 10)).toBeNull();
+  });
+
+  it("rejects numbers that are too long or too short", () => {
+    expect(phoneProblem("+91", "987654321012", 10)).toBe("Enter a valid 10-digit phone number");
+    expect(phoneProblem("+91", "98765", 10)).toBe("Enter a valid 10-digit phone number");
+    expect(phoneProblem("+65", "912345678", 8)).toBe("Enter a valid 8-digit phone number");
+  });
+
+  it("leaves a number typed with a different country code to the server", () => {
+    expect(phoneProblem("+91", "+44 7700 900123", 10)).toBeNull();
+  });
+});
+
+describe("previewText for a deleted message", () => {
+  const base: Omit<Message, "sender_id"> = {
+    id: 1, conversation_id: 1, type: "text", body: "", client_id: null, created_at: "",
+    status: "sent", deleted: true, expires_at: null, reply_to: null, reactions: [],
+  };
+  const chat = { type: "direct" } as Conversation;
+
+  it("says who deleted it without showing any text", () => {
+    expect(previewText({ ...base, sender_id: 1 }, chat, 1, {})).toBe("You deleted this message");
+    expect(previewText({ ...base, sender_id: 2 }, chat, 1, {})).toBe("This message was deleted");
+  });
+});

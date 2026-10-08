@@ -17,7 +17,12 @@ export type MessageStatus = "sending" | "sent" | "delivered" | "read" | "failed"
 
 export type ReactionGroup = { emoji: string; user_ids: number[] };
 
-export type ReplyPreview = { id: number; sender_id: number | null; body: string };
+export type ReplyPreview = {
+  id: number;
+  sender_id: number | null;
+  body: string;
+  deleted: boolean;
+};
 
 export type Message = {
   id: number;
@@ -28,6 +33,10 @@ export type Message = {
   client_id: string | null;
   created_at: string;
   status: MessageStatus | null;
+  /** Deleted for everyone: the bubble stays as a tombstone with no text. */
+  deleted: boolean;
+  /** Set on disappearing messages; the server removes them at this time. */
+  expires_at: string | null;
   reply_to: ReplyPreview | null;
   reactions: ReactionGroup[];
 };
@@ -41,6 +50,8 @@ export type Conversation = {
   avatar_color: string | null;
   created_by: number;
   last_message_at: string;
+  /** Disappearing-message timer for new messages, or null when off. */
+  disappearing_seconds: number | null;
   last_message: Message | null;
   unread_count: number;
   members: Member[];
@@ -52,6 +63,8 @@ export type VerifyResponse = { token: string; user: User; needs_profile: boolean
 
 export type ServerEvent =
   | { type: "message.new"; data: { message: Message } }
+  | { type: "message.updated"; data: { message: Message } }
+  | { type: "message.expired"; data: { conversation_id: number; message_ids: number[] } }
   | {
       type: "message.status";
       data: { conversation_id: number; message_ids: number[]; status: MessageStatus };

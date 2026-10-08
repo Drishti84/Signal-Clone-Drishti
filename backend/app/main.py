@@ -1,4 +1,6 @@
-from contextlib import asynccontextmanager
+import asyncio
+import logging
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,8 +9,31 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.database import SessionLocal, init_db
 from app.errors import ServiceError
+from app.realtime.events import Event
+from app.realtime.manager import manager
 from app.routers import auth, contacts, conversations, messages, users, ws
 from app.seed import seed_if_empty
+from app.services.expiry import purge_expired
+
+log = logging.getLogger(__name__)
+
+
+def _purge_once() -> list[Event]:
+    with SessionLocal() as db:
+        events = purge_expired(db)
+        db.commit()
+        return events
+
+
+async def _expiry_loop(interval: float) -> None:
+    """Remove expired disappearing messages for as long as the app runs."""
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            # The database work is blocking, so it runs off the event loop.
+            await manager.dispatch(await asyncio.to_thread(_purge_once))
+        except Exception:  # one bad pass must not end the loop
+            log.exception("expiry sweep failed")
 
 
 @asynccontextmanager
@@ -19,7 +44,14 @@ async def lifespan(_app: FastAPI):
         with SessionLocal() as db:
             seed_if_empty(db)
             db.commit()
+    sweeper = None
+    if settings.expiry_sweep_seconds > 0:
+        sweeper = asyncio.create_task(_expiry_loop(settings.expiry_sweep_seconds))
     yield
+    if sweeper is not None:
+        sweeper.cancel()
+        with suppress(asyncio.CancelledError):
+            await sweeper
 
 
 app = FastAPI(title="Signal Clone API", lifespan=lifespan)

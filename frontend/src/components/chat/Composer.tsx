@@ -120,7 +120,7 @@ export function Composer({ conversationId, meId, users }: Props) {
             <Smile size={20} />
           </IconButton>
           {emojiOpen && (
-            <div className="animate-pop-in absolute bottom-full left-0 z-20 mb-2 grid w-[296px] grid-cols-8 gap-0.5 rounded-xl bg-surface p-2 shadow-pop ring-1 ring-border">
+            <div data-popover className="animate-pop-in absolute bottom-full left-0 z-20 mb-2 grid w-[296px] grid-cols-8 gap-0.5 rounded-xl bg-surface p-2 shadow-pop ring-1 ring-border">
               {COMPOSER_EMOJI.map((emoji) => (
                 <button
                   key={emoji}
