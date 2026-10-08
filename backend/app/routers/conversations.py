@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy.orm import Session as Db
 
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import Conversation, User
+from app.realtime.events import Event
 from app.realtime.manager import manager
 from app.schemas.conversation import ConversationOut, DirectIn, GroupIn
 from app.services import conversations
@@ -35,11 +36,14 @@ def open_direct(body: DirectIn, me: User = Depends(get_current_user),
 
 
 @router.post("/group", response_model=ConversationOut, status_code=201)
-def create_group(body: GroupIn, me: User = Depends(get_current_user),
-                 db: Db = Depends(get_db)):
+def create_group(body: GroupIn, background: BackgroundTasks,
+                 me: User = Depends(get_current_user), db: Db = Depends(get_db)):
     conv = conversations.create_group(db, me, body.name, body.member_ids)
     db.commit()
-    return _out_for(db, conv, me)
+    out = _out_for(db, conv, me)  # nobody has unread messages in a brand-new group
+    background.add_task(manager.dispatch, [
+        Event(conversations.member_ids(conv), "conversation.new", {"conversation": out})])
+    return out
 
 
 @router.get("/{conversation_id}", response_model=ConversationOut)

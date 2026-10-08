@@ -1,17 +1,27 @@
-from fastapi import APIRouter, Depends, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, Response, UploadFile
 from sqlalchemy.orm import Session as Db
 
 from app.constants import AVATAR_MAX_BYTES
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import User
+from app.realtime.events import Event
 from app.realtime.manager import manager
 from app.schemas.user import ProfileUpdate, UserOut
-from app.services import users
+from app.services import presence, users
 from app.services.phone import normalize_phone
 from app.services.serializers import user_out
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+
+
+def _profile_changed(db: Db, me: User, background: BackgroundTasks) -> dict:
+    """Commit a profile change and tell everyone who can see this user."""
+    db.commit()
+    out = user_out(me, manager.online_ids())
+    audience = presence.audience(db, me.id) + [me.id]
+    background.add_task(manager.dispatch, [Event(audience, "user.updated", {"user": out})])
+    return out
 
 
 @router.get("", response_model=list[UserOut])
@@ -28,30 +38,28 @@ def get_me(me: User = Depends(get_current_user)):
 
 
 @router.patch("/me", response_model=UserOut)
-def update_me(body: ProfileUpdate, me: User = Depends(get_current_user),
-              db: Db = Depends(get_db)):
+def update_me(body: ProfileUpdate, background: BackgroundTasks,
+              me: User = Depends(get_current_user), db: Db = Depends(get_db)):
     for field in body.model_fields_set:
         setattr(me, field, getattr(body, field))
-    db.commit()
-    return user_out(me, manager.online_ids())
+    return _profile_changed(db, me, background)
 
 
 @router.put("/me/avatar", response_model=UserOut)
-def upload_avatar(file: UploadFile, me: User = Depends(get_current_user),
-                  db: Db = Depends(get_db)):
+def upload_avatar(file: UploadFile, background: BackgroundTasks,
+                  me: User = Depends(get_current_user), db: Db = Depends(get_db)):
     # Read one byte past the limit: enough to know it is too big, without
     # pulling an arbitrarily large upload into memory.
     data = file.file.read(AVATAR_MAX_BYTES + 1)
     users.set_avatar(db, me, data)
-    db.commit()
-    return user_out(me, manager.online_ids())
+    return _profile_changed(db, me, background)
 
 
 @router.delete("/me/avatar", response_model=UserOut)
-def delete_avatar(me: User = Depends(get_current_user), db: Db = Depends(get_db)):
+def delete_avatar(background: BackgroundTasks, me: User = Depends(get_current_user),
+                  db: Db = Depends(get_db)):
     users.remove_avatar(db, me)
-    db.commit()
-    return user_out(me, manager.online_ids())
+    return _profile_changed(db, me, background)
 
 
 @router.get("/lookup", response_model=UserOut)
