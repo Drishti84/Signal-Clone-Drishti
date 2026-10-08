@@ -6,13 +6,14 @@ from sqlalchemy.orm import Session as Db
 from app.errors import BadRequest, Conflict, Forbidden, NotFound
 from app.models import Message, MessageReceipt, User, utcnow
 from app.realtime.events import Event
+from app.services import attachments
 from app.services.conversations import get_member, member_ids, not_expired
 from app.services.serializers import message_out
 
 
 def send_message(db: Db, me: User, conversation_id: int, body: str, client_id: str,
-                 reply_to_id: int | None, online: set[int]
-                 ) -> tuple[Message, list[Event], bool]:
+                 reply_to_id: int | None, online: set[int],
+                 attachment_id: int | None = None) -> tuple[Message, list[Event], bool]:
     """Save a message and its receipts. Returns (message, events, created);
     `created` is False when this client_id was already saved, which happens
     when the client retries after losing the first response."""
@@ -28,6 +29,8 @@ def send_message(db: Db, me: User, conversation_id: int, body: str, client_id: s
         target = db.get(Message, reply_to_id)
         if target is None or target.conversation_id != conversation_id:
             raise BadRequest("You can only reply to a message in this chat")
+    attachment = (attachments.claim(db, me, conversation_id, attachment_id)
+                  if attachment_id is not None else None)
     now = utcnow()
     msg = Message(conversation_id=conversation_id, sender_id=me.id, type="text",
                   body=body, client_id=client_id, reply_to_id=reply_to_id, created_at=now)
@@ -39,6 +42,7 @@ def send_message(db: Db, me: User, conversation_id: int, body: str, client_id: s
     # Recipients with an open socket receive it as part of this same request.
     msg.receipts = [MessageReceipt(user_id=uid, delivered_at=now if uid in online else None)
                     for uid in recipients]
+    msg.attachment = attachment
     db.add(msg)
     db.flush()
     conv.last_message_at = now
@@ -77,6 +81,7 @@ def delete_message(db: Db, me: User, message_id: int) -> tuple[Message, list[Eve
     msg.body = ""
     msg.deleted_at = utcnow()
     msg.reactions.clear()
+    msg.attachment = None  # the file itself is deleted, not just unlinked
     db.flush()
     event = Event(member_ids(member.conversation), "message.updated",
                   {"message": message_out(msg)})

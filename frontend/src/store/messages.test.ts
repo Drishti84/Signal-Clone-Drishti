@@ -22,7 +22,8 @@ const user = (id: number): User => ({
 const message = (id: number, sender: number, extra: Partial<Message> = {}): Message => ({
   id, conversation_id: CHAT, sender_id: sender, type: "text", body: `m${id}`,
   client_id: `client-${id}`, created_at: new Date(2026, 0, 1, 10, id).toISOString(),
-  status: "sent", deleted: false, expires_at: null, reply_to: null, reactions: [], ...extra,
+  status: "sent", deleted: false, expires_at: null, reply_to: null, reactions: [],
+  attachment: null, ...extra,
 });
 
 const conversation = (extra: Partial<Conversation> = {}): Conversation => ({
@@ -158,5 +159,59 @@ describe("deleting and expiring", () => {
     api.post.mockImplementationOnce(() => new Promise(() => undefined));
     useMessages.getState().send(CHAT, "soon gone");
     expect(useMessages.getState().byConversation[CHAT][0].expires_at).toEqual(expect.any(String));
+  });
+});
+
+describe("sending an attachment", () => {
+  const photo = { id: 77, filename: "cat.png", content_type: "image/png", size: 3, is_image: true, width: 10, height: 10 };
+  const file = () => new File([new Uint8Array([1, 2, 3])], "cat.png", { type: "image/png" });
+
+  beforeEach(async () => {
+    api.get.mockResolvedValueOnce({ messages: [], has_more: false });
+    await useMessages.getState().loadLatest(CHAT);
+  });
+
+  it("shows the bubble at once, uploads the file, then sends the message with its id", async () => {
+    api.post.mockImplementation(async (path: string, body: unknown) => {
+      if (path.endsWith("/attachments")) return photo;
+      const sent = body as { client_id: string; attachment_id: number; body: string };
+      return message(30, ME, { client_id: sent.client_id, body: sent.body, attachment: photo });
+    });
+    useMessages.getState().send(CHAT, "", null, { file: file(), width: 10, height: 10 });
+    const optimistic = useMessages.getState().byConversation[CHAT][0];
+    expect(optimistic.status).toBe("sending");
+    expect(optimistic.attachment?.filename).toBe("cat.png");
+    expect(optimistic.attachment?.local_url).toEqual(expect.any(String));
+
+    await vi.waitFor(() => expect(useMessages.getState().byConversation[CHAT][0].id).toBe(30));
+    expect(api.post.mock.calls[0][0]).toBe(`/api/conversations/${CHAT}/attachments`);
+    expect(api.post.mock.calls[0][1]).toBeInstanceOf(FormData);
+    expect(api.post.mock.calls[1][1]).toMatchObject({ attachment_id: 77, body: "" });
+    expect(useMessages.getState().byConversation[CHAT]).toHaveLength(1);
+  });
+
+  it("does not upload the file a second time when only the message step failed", async () => {
+    let failMessage = true;
+    api.post.mockImplementation(async (path: string, body: unknown) => {
+      if (path.endsWith("/attachments")) return photo;
+      if (failMessage) throw new Error("network");
+      const sent = body as { client_id: string };
+      return message(31, ME, { client_id: sent.client_id, attachment: photo });
+    });
+    useMessages.getState().send(CHAT, "caption", null, { file: file() });
+    await vi.waitFor(() => expect(useMessages.getState().byConversation[CHAT][0].status).toBe("failed"));
+    const clientId = useMessages.getState().byConversation[CHAT][0].client_id!;
+    failMessage = false;
+    useMessages.getState().retry(CHAT, clientId);
+    await vi.waitFor(() => expect(useMessages.getState().byConversation[CHAT][0].id).toBe(31));
+    const uploads = api.post.mock.calls.filter(([path]) => String(path).endsWith("/attachments"));
+    expect(uploads).toHaveLength(1);
+  });
+
+  it("marks the bubble failed when the upload itself fails", async () => {
+    api.post.mockRejectedValue(new Error("too big"));
+    useMessages.getState().send(CHAT, "", null, { file: file() });
+    await vi.waitFor(() => expect(useMessages.getState().byConversation[CHAT][0].status).toBe("failed"));
+    expect(api.post).toHaveBeenCalledTimes(1);
   });
 });

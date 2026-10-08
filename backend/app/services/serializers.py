@@ -1,6 +1,6 @@
 """Turn database rows into the plain dicts the API and the socket both send."""
 
-from app.models import Conversation, Message, User
+from app.models import Attachment, Conversation, Message, User
 
 REPLY_PREVIEW_LENGTH = 200
 
@@ -29,6 +29,26 @@ def aggregate_status(receipts) -> str:
     return "sent"
 
 
+def attachment_out(attachment: Attachment) -> dict:
+    return {
+        "id": attachment.id,
+        "filename": attachment.filename,
+        "content_type": attachment.content_type,
+        "size": attachment.size,
+        "is_image": attachment.is_image,
+        "width": attachment.width,
+        "height": attachment.height,
+    }
+
+
+def _quote_text(reply: Message) -> str:
+    """What a reply shows of the message it answers: its text, or failing
+    that a name for its attachment."""
+    if reply.body or reply.attachment is None:
+        return reply.body[:REPLY_PREVIEW_LENGTH]
+    return "Photo" if reply.attachment.is_image else reply.attachment.filename
+
+
 def message_out(msg: Message) -> dict:
     grouped: dict[str, list[int]] = {}
     for reaction in msg.reactions:
@@ -46,9 +66,10 @@ def message_out(msg: Message) -> dict:
         "deleted": msg.deleted_at is not None,
         "expires_at": msg.expires_at,
         "reply_to": ({"id": reply.id, "sender_id": reply.sender_id,
-                      "body": reply.body[:REPLY_PREVIEW_LENGTH],
+                      "body": _quote_text(reply),
                       "deleted": reply.deleted_at is not None} if reply else None),
         "reactions": [{"emoji": emoji, "user_ids": ids} for emoji, ids in grouped.items()],
+        "attachment": attachment_out(msg.attachment) if msg.attachment else None,
     }
 
 

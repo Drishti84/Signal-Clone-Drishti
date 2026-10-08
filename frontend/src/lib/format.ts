@@ -87,12 +87,17 @@ export function previewText(
   if (!message) return "No messages yet";
   if (message.type === "system") return message.body;
   if (message.deleted) return deletedText(message.sender_id === meId);
-  if (message.sender_id === meId) return `You: ${message.body}`;
+  // An attachment shows as an icon plus its caption, or plus its name.
+  const file = message.attachment;
+  const text = file
+    ? `${file.is_image ? "📷" : "📎"} ${message.body || (file.is_image ? "Photo" : file.filename)}`
+    : message.body;
+  if (message.sender_id === meId) return `You: ${text}`;
   if (conversation.type === "group" && message.sender_id !== null) {
     const first = displayName(users[message.sender_id]).split(" ")[0];
-    return `${first}: ${message.body}`;
+    return `${first}: ${text}`;
   }
-  return message.body;
+  return text;
 }
 
 export function formatPhone(phone: string): string {

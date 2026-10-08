@@ -1,10 +1,11 @@
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session as Db
 
-from app.models import ConversationMember, Message, utcnow
+from app.constants import ORPHAN_ATTACHMENT_HOURS
+from app.models import Attachment, ConversationMember, Message, utcnow
 from app.realtime.events import Event
 
 
@@ -15,6 +16,10 @@ def purge_expired(db: Db, now: datetime | None = None) -> list[Event]:
     Rows are deleted outright: receipts and reactions go with them (database
     cascades), and a reply that quoted one simply loses its quote."""
     now = now or utcnow()
+    # Uploads whose message was never sent (the tab was closed, say).
+    db.execute(delete(Attachment).where(
+        Attachment.message_id.is_(None),
+        Attachment.created_at < now - timedelta(hours=ORPHAN_ATTACHMENT_HOURS)))
     expired = db.execute(
         select(Message.id, Message.conversation_id)
         .where(Message.expires_at.is_not(None), Message.expires_at <= now)

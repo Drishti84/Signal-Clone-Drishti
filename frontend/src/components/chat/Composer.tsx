@@ -1,32 +1,41 @@
 "use client";
 
-import { ArrowUp, Mic, Plus, Smile, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { ArrowUp, FileText, Mic, Plus, Smile, X } from "lucide-react";
+import {
+  useCallback, useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent,
+} from "react";
 
 import { useSocketSend } from "@/components/providers/SocketProvider";
 import { IconButton } from "@/components/ui/IconButton";
+import { fileProblem, formatBytes, imageSize } from "@/lib/attachments";
 import { COMPOSER_EMOJI, MESSAGE_MAX_LENGTH, TYPING_RESEND_MS } from "@/lib/constants";
 import { displayName } from "@/lib/format";
 import { useDismiss } from "@/lib/hooks";
 import type { User } from "@/lib/types";
-import { useMessages } from "@/store/messages";
+import { useMessages, type OutgoingFile } from "@/store/messages";
 import { useUi } from "@/store/ui";
 
 const MAX_HEIGHT_PX = 132; // about six lines
 
 type Props = { conversationId: number; meId: number; users: Record<number, User> };
 
+/** A file picked but not sent yet, with a preview URL if it is a picture. */
+type Draft = OutgoingFile & { previewUrl: string | null };
+
 /** The message box. Enter sends, Shift+Enter adds a line. While there is
- * text it tells the other side we are typing, at most once every few seconds. */
+ * text it tells the other side we are typing, at most once every few seconds.
+ * A file can be attached with the + button or by pasting a picture. */
 export function Composer({ conversationId, meId, users }: Props) {
   const [text, setText] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [draft, setDraft] = useState<Draft | null>(null);
   const replyTo = useUi((state) => state.replyTo);
   const setReplyTo = useUi((state) => state.setReplyTo);
   const toast = useUi((state) => state.toast);
   const sendFrame = useSocketSend();
 
   const input = useRef<HTMLTextAreaElement>(null);
+  const filePicker = useRef<HTMLInputElement>(null);
   const emojiPanel = useRef<HTMLDivElement>(null);
   const typingSentAt = useRef(0);
   const stopTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -69,15 +78,33 @@ export function Composer({ conversationId, meId, users }: Props) {
     stopTimer.current = setTimeout(stopTyping, TYPING_RESEND_MS);
   };
 
+  const attach = async (file: File | null | undefined) => {
+    if (!file) return;
+    const problem = fileProblem(file);
+    if (problem) {
+      toast(problem, "error");
+      return;
+    }
+    const size = await imageSize(file);
+    setDraft({
+      file,
+      width: size?.width,
+      height: size?.height,
+      previewUrl: size ? URL.createObjectURL(file) : null,
+    });
+    input.current?.focus();
+  };
+
   const submit = () => {
     const body = text.trim();
-    if (!body) return;
+    if (!body && !draft) return;
     if (body.length > MESSAGE_MAX_LENGTH) {
       toast(`Messages can be at most ${MESSAGE_MAX_LENGTH} characters`, "error");
       return;
     }
-    useMessages.getState().send(conversationId, body, replyTo);
+    useMessages.getState().send(conversationId, body, replyTo, draft ?? undefined);
     setText("");
+    setDraft(null);
     setReplyTo(null);
     stopTyping();
     requestAnimationFrame(resize);
@@ -94,7 +121,14 @@ export function Composer({ conversationId, meId, users }: Props) {
     }
   };
 
-  const hasText = text.trim().length > 0;
+  const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = Array.from(event.clipboardData.files)[0];
+    if (!pasted) return; // ordinary text: let the browser paste it
+    event.preventDefault();
+    void attach(pasted);
+  };
+
+  const canSend = text.trim().length > 0 || draft !== null;
 
   return (
     <div className="shrink-0 px-4 pb-4 pt-1 max-md:px-2 max-md:pb-2">
@@ -106,9 +140,32 @@ export function Composer({ conversationId, meId, users }: Props) {
                 ? "You"
                 : displayName(replyTo.sender_id !== null ? users[replyTo.sender_id] : null)}
             </div>
-            <div className="truncate text-[13px] text-fg-2">{replyTo.body}</div>
+            <div className="truncate text-[13px] text-fg-2">
+              {replyTo.body || (replyTo.attachment?.is_image ? "Photo" : replyTo.attachment?.filename)}
+            </div>
           </div>
           <IconButton label="Cancel reply" size={28} onClick={() => setReplyTo(null)}>
+            <X size={16} />
+          </IconButton>
+        </div>
+      )}
+
+      {draft && (
+        <div className="mb-2 flex items-center gap-3 rounded-xl bg-pane p-2">
+          {draft.previewUrl ? (
+            // A local preview of the picked file.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={draft.previewUrl} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
+          ) : (
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-hover">
+              <FileText size={24} />
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[13px] font-medium">{draft.file.name}</div>
+            <div className="text-xs text-fg-2">{formatBytes(draft.file.size)}</div>
+          </div>
+          <IconButton label="Remove attachment" size={28} onClick={() => setDraft(null)}>
             <X size={16} />
           </IconButton>
         </div>
@@ -142,15 +199,37 @@ export function Composer({ conversationId, meId, users }: Props) {
             value={text}
             onChange={(event) => change(event.target.value)}
             onKeyDown={onKeyDown}
+            onPaste={onPaste}
             onBlur={stopTyping}
             rows={1}
-            placeholder="Message"
+            placeholder={draft ? "Add a caption" : "Message"}
             aria-label="Message"
             className="max-h-[132px] min-w-0 flex-1 resize-none bg-transparent py-2 pl-1 outline-none placeholder:text-fg-2"
           />
         </div>
 
-        {hasText ? (
+        <input
+          ref={filePicker}
+          type="file"
+          className="hidden"
+          aria-label="Choose a file to attach"
+          onChange={(event) => {
+            void attach(event.target.files?.[0]);
+            event.target.value = ""; // allow picking the same file again
+          }}
+        />
+
+        {!canSend && (
+          <IconButton label="Voice message" size={36} onClick={() => toast("Voice messages are coming soon")}>
+            <Mic size={20} />
+          </IconButton>
+        )}
+        {!draft && (
+          <IconButton label="Attach a file" size={36} onClick={() => filePicker.current?.click()}>
+            <Plus size={22} />
+          </IconButton>
+        )}
+        {canSend && (
           <button
             type="button"
             aria-label="Send"
@@ -160,15 +239,6 @@ export function Composer({ conversationId, meId, users }: Props) {
           >
             <ArrowUp size={20} strokeWidth={2.4} />
           </button>
-        ) : (
-          <>
-            <IconButton label="Voice message" size={36} onClick={() => toast("Voice messages are coming soon")}>
-              <Mic size={20} />
-            </IconButton>
-            <IconButton label="Attach" size={36} onClick={() => toast("Attachments are coming soon")}>
-              <Plus size={22} />
-            </IconButton>
-          </>
         )}
       </div>
     </div>

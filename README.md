@@ -41,6 +41,8 @@ To register a new account, enter any phone number and use the code **123456**.
 - Disappearing messages: a per-chat timer (30 seconds to 4 weeks); messages sent while it
   is on are removed for everyone when their time is up
 - Delete for everyone: the sender can remove a message; others see "This message was deleted"
+- Attachments: send a photo or any file up to 5 MB with an optional caption, by picking it or
+  pasting a picture. Photos show in the bubble and open full-size; other files download
 - Dark mode (System / Light / Dark), remembered per device
 - Responsive layout: two panes on desktop and tablet; on a phone, the chat list and the open
   chat take turns on screen, with the tabs along the bottom
@@ -48,7 +50,7 @@ To register a new account, enter any phone number and use the code **123456**.
 
 **Placeholders ("Coming soon")**
 
-Voice and video calls, stories, linked devices, attachments, and the Privacy and
+Voice and video calls, voice messages, stories, linked devices, and the Privacy and
 Notifications settings. End-to-end encryption is simulated: the app shows Signal's
 encryption notice, but messages are stored as plain text.
 
@@ -60,7 +62,7 @@ encryption notice, but messages are stored as plain text.
 | Backend | Python, FastAPI, SQLAlchemy 2, Pydantic v2 |
 | Database | SQLite |
 | Real-time | WebSocket (one connection per browser tab) |
-| Tests | pytest (117 backend tests), Vitest (20 frontend store and helper tests) |
+| Tests | pytest (130 backend tests), Vitest (25 frontend store and helper tests) |
 | Hosting | Vercel (frontend), Render (backend) |
 
 ## Architecture
@@ -154,6 +156,7 @@ erDiagram
     users ||--o{ messages : "sends"
     messages ||--o{ message_receipts : "tracked by"
     messages ||--o{ reactions : "gets"
+    messages ||--o| attachments : "carries"
     messages ||--o{ messages : "replies to"
 ```
 
@@ -171,6 +174,7 @@ Timestamps are stored in UTC. Foreign keys are enforced.
 | `messages` | `conversation_id` (FK), `sender_id` (FK, null for system lines), `type` (`text`/`system`), `body`, `reply_to_id` (FK), `client_id`, `deleted_at`, `expires_at` (indexed) | Indexed on (conversation, id); unique on (sender, client_id); ids are never reused |
 | `message_receipts` | `message_id` (FK), `user_id` (FK), `delivered_at`, `read_at` | Unique per (message, user) |
 | `reactions` | `message_id` (FK), `user_id` (FK), `emoji` | Unique per (message, user) |
+| `attachments` | `conversation_id` (FK), `uploader_id` (FK), `message_id` (FK, unique, empty until sent), `filename`, `content_type`, `size`, `is_image`, `width`, `height`, `data` (blob) | One file per message |
 
 **Design decisions worth explaining**
 
@@ -193,6 +197,12 @@ Timestamps are stored in UTC. Foreign keys are enforced.
   a background sweep, taking its receipts and reactions with it through cascades; queries also
   filter on `expires_at`, so nothing expired is ever served in the second before the sweep runs.
 - **`messages.client_id`** with a unique constraint per sender makes sending idempotent.
+- **`attachments` is its own table**, like `user_avatars`: file bytes are loaded only when a
+  file is actually downloaded, never when messages are listed. A file is uploaded first with no
+  message, then claimed by the message that sends it (`message_id` is unique, so a file cannot be
+  attached twice). It records its `conversation_id`, so access can be checked without the message.
+  Deleting a message or letting it expire removes its file through a cascade, and uploads that
+  are never sent are cleaned up after an hour.
 - **`user_avatars` is a separate table** with the image bytes loaded lazily, so listing users
   never reads image data. `users.avatar_version` goes into the image URL so a new photo shows
   up immediately, and the image is served with an ETag so browsers re-check it cheaply.
@@ -252,6 +262,8 @@ served at `/docs` on the backend.
 | POST | `/conversations/{id}/messages` | Send (`body`, `client_id`, optional `reply_to_id`) |
 | PUT / DELETE | `/messages/{id}/reaction` | Set or remove my reaction |
 | DELETE | `/messages/{id}` | Delete for everyone (sender only) |
+| POST | `/conversations/{id}/attachments` | Upload a file; send its id with the next message |
+| GET | `/attachments/{id}` | Download a file (members of its chat only) |
 
 **WebSocket** `/ws?token=<session token>`. Frames are `{ "type": ..., "data": ... }`.
 
@@ -354,9 +366,15 @@ read, delivered and unsent states, so every badge and check mark has something t
   which do not count as unread for them.
 - **Avatar photos** are cropped to a square and shrunk to 256 × 256 in the browser, and are
   limited to 256 KB.
+- **Attachments are stored in SQLite**, one per message, up to 5 MB each. That keeps the stack
+  to the one required database; a production system would use object storage. On the hosted
+  demo they are lost with everything else when the server restarts.
+- **Files are private to their chat.** The browser fetches them with the login token, and only
+  real images (checked by content, not by name) are ever displayed. Everything else, including
+  HTML and SVG, is served strictly as a download so it cannot run in the app.
 
 ## What I would add next
 
-Attachments, message editing, catching up on
+Several attachments per message, voice messages, message editing, catching up on
 more than one page of missed messages after a long disconnect, and a persistent database with
 a shared pub/sub layer for multiple backend instances.

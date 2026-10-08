@@ -66,3 +66,5 @@ export const DISAPPEARING_OPTIONS: { seconds: number | null; label: string; shor
   { seconds: 604800, label: "1 week", short: "1w" },
   { seconds: 2419200, label: "4 weeks", short: "4w" },
 ];
+
+export const ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;

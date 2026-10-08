@@ -57,7 +57,23 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return payload as T;
 }
 
+/** Fetch a private file (an attachment) with the login token. */
+async function blob(path: string): Promise<Blob> {
+  const token = useAuth.getState().token;
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    throw new ApiError(0, "Can't reach the server. Check your connection.");
+  }
+  if (!response.ok) throw new ApiError(response.status, "This file is no longer available");
+  return response.blob();
+}
+
 export const api = {
+  blob,
   get: <T>(path: string) => request<T>("GET", path),
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, body ?? {}),
   patch: <T>(path: string, body: unknown) => request<T>("PATCH", path, body),

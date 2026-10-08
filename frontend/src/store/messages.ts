@@ -1,11 +1,17 @@
 import { create } from "zustand";
 
 import { api } from "@/lib/api";
-import type { Message, MessagePage, MessageStatus, ReactionGroup } from "@/lib/types";
+import { rememberLocalUrl } from "@/lib/attachments";
+import type {
+  Attachment, Message, MessagePage, MessageStatus, ReactionGroup,
+} from "@/lib/types";
 import { useAuth } from "@/store/auth";
 import { useConversations } from "@/store/conversations";
 import { usePresence } from "@/store/presence";
 import { useUi } from "@/store/ui";
+
+/** A file to send with a message, with its pixel size if it is a picture. */
+export type OutgoingFile = { file: File; width?: number; height?: number };
 
 type MessagesState = {
   /** Oldest first. Messages still being sent sit at the end with negative ids. */
@@ -15,7 +21,12 @@ type MessagesState = {
   firstUnread: Record<number, number | null>;
   loadLatest: (conversationId: number) => Promise<void>;
   loadOlder: (conversationId: number) => Promise<boolean>;
-  send: (conversationId: number, body: string, replyTo?: Message | null) => void;
+  send: (
+    conversationId: number,
+    body: string,
+    replyTo?: Message | null,
+    attachment?: OutgoingFile,
+  ) => void;
   retry: (conversationId: number, clientId: string) => void;
   applyNew: (message: Message) => void;
   applyStatus: (conversationId: number, messageIds: number[], status: MessageStatus) => void;
@@ -39,6 +50,11 @@ function later(current: MessageStatus | null, next: MessageStatus | null): Messa
 }
 
 let temporaryId = 0;
+
+// Files on their way out, by the message's client_id. The uploaded id is
+// kept once the upload succeeds, so a retry of the message step does not
+// send the file again.
+const outgoing = new Map<string, OutgoingFile & { uploaded?: Attachment }>();
 
 /** Saved messages by id, then unsent ones in the order they were written. */
 function sorted(messages: Message[]): Message[] {
@@ -98,12 +114,29 @@ export const useMessages = create<MessagesState>((set, get) => {
     );
 
   const post = async (conversationId: number, message: Message) => {
+    const pending = message.client_id ? outgoing.get(message.client_id) : undefined;
     try {
+      if (pending && !pending.uploaded) {
+        // Step one: store the file. Step two below sends the message with it.
+        const form = new FormData();
+        form.append("file", pending.file, pending.file.name);
+        if (pending.width) form.append("width", String(pending.width));
+        if (pending.height) form.append("height", String(pending.height));
+        pending.uploaded = await api.post<Attachment>(
+          `/api/conversations/${conversationId}/attachments`, form,
+        );
+      }
       const saved = await api.post<Message>(`/api/conversations/${conversationId}/messages`, {
         body: message.body,
         client_id: message.client_id,
         reply_to_id: message.reply_to?.id ?? null,
+        attachment_id: pending?.uploaded?.id ?? null,
       });
+      if (saved.attachment && message.attachment?.local_url) {
+        // Keep showing our own copy instead of downloading it back.
+        rememberLocalUrl(saved.attachment.id, message.attachment.local_url);
+      }
+      if (message.client_id) outgoing.delete(message.client_id);
       get().applyNew(saved);
     } catch {
       // Only a bubble that is still unsaved has failed. If the socket already
@@ -163,9 +196,11 @@ export const useMessages = create<MessagesState>((set, get) => {
       return page.messages.length > 0;
     },
 
-    send: (conversationId, body, replyTo) => {
+    send: (conversationId, body, replyTo, attachment) => {
       const me = useAuth.getState().user;
       if (!me) return;
+      const clientId = crypto.randomUUID();
+      if (attachment) outgoing.set(clientId, attachment);
       const timer = useConversations.getState().byId[conversationId]?.disappearing_seconds;
       // Shown immediately as "sending"; the server's copy replaces it by client_id.
       const optimistic: Message = {
@@ -174,7 +209,7 @@ export const useMessages = create<MessagesState>((set, get) => {
         sender_id: me.id,
         type: "text",
         body,
-        client_id: crypto.randomUUID(),
+        client_id: clientId,
         created_at: new Date().toISOString(),
         status: "sending",
         deleted: false,
@@ -189,6 +224,18 @@ export const useMessages = create<MessagesState>((set, get) => {
             }
           : null,
         reactions: [],
+        attachment: attachment
+          ? {
+              id: temporaryId, // not saved yet; replaced by the server's copy
+              filename: attachment.file.name,
+              content_type: attachment.file.type,
+              size: attachment.file.size,
+              is_image: attachment.width !== undefined,
+              width: attachment.width ?? null,
+              height: attachment.height ?? null,
+              local_url: URL.createObjectURL(attachment.file),
+            }
+          : null,
       };
       replace(conversationId, (messages) => [...messages, optimistic], true);
       get().clearUnreadDivider(conversationId);
@@ -309,6 +356,9 @@ export const useMessages = create<MessagesState>((set, get) => {
           : state,
       ),
 
-    reset: () => set({ byConversation: {}, hasMore: {}, firstUnread: {} }),
+    reset: () => {
+      outgoing.clear();
+      set({ byConversation: {}, hasMore: {}, firstUnread: {} });
+    },
   };
 });

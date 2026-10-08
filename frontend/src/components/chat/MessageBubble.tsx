@@ -1,13 +1,15 @@
 "use client";
 
-import { Ban, Copy, MoreHorizontal, Reply, Smile, Timer, Trash2 } from "lucide-react";
+import { Ban, Copy, Download, MoreHorizontal, Reply, Smile, Timer, Trash2 } from "lucide-react";
 import { memo, useRef, useState, type CSSProperties } from "react";
 
+import { AttachmentView } from "@/components/chat/AttachmentView";
 import { StatusIcon } from "@/components/chat/StatusIcon";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Menu, type MenuItem } from "@/components/ui/Menu";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { api, errorMessage } from "@/lib/api";
+import { saveAttachment } from "@/lib/attachments";
 import { AVATAR_COLORS, REACTION_EMOJI } from "@/lib/constants";
 import { bubbleTime, deletedText, displayName } from "@/lib/format";
 import { useDismiss } from "@/lib/hooks";
@@ -96,7 +98,19 @@ export const MessageBubble = memo(function MessageBubble({
     }
   };
 
-  const menuItems: MenuItem[] = [{ label: "Copy text", icon: <Copy size={15} />, onSelect: copy }];
+  const menuItems: MenuItem[] = [];
+  if (message.body) menuItems.push({ label: "Copy text", icon: <Copy size={15} />, onSelect: copy });
+  if (message.attachment) {
+    const file = message.attachment;
+    menuItems.push({
+      label: file.is_image ? "Save photo" : "Download file",
+      icon: <Download size={15} />,
+      onSelect: () =>
+        void saveAttachment(file).catch((error) =>
+          useUi.getState().toast(errorMessage(error), "error"),
+        ),
+    });
+  }
   if (isMine) {
     menuItems.push({
       label: "Delete for everyone",
@@ -151,6 +165,10 @@ export const MessageBubble = memo(function MessageBubble({
                 {quoted.deleted ? "Deleted message" : quoted.body}
               </span>
             </button>
+          )}
+
+          {message.attachment && !deleted && (
+            <AttachmentView attachment={message.attachment} isMine={isMine} />
           )}
 
           <div className="flex flex-wrap items-end justify-end gap-x-2">

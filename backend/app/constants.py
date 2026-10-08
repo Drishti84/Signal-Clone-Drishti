@@ -5,6 +5,10 @@ NAME_MAX_LENGTH = 64
 ABOUT_MAX_LENGTH = 140
 AVATAR_MAX_BYTES = 256 * 1024
 MESSAGE_PAGE_SIZE = 50
+ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024
+FILENAME_MAX_LENGTH = 120
+# An upload that is never sent with a message is thrown away after this long.
+ORPHAN_ATTACHMENT_HOURS = 1
 
 # Digits after the country code, for the countries the sign-up form offers.
 # Other countries only get the general E.164 length check.

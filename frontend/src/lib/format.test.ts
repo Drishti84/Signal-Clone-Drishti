@@ -50,11 +50,32 @@ describe("previewText for a deleted message", () => {
   const base: Omit<Message, "sender_id"> = {
     id: 1, conversation_id: 1, type: "text", body: "", client_id: null, created_at: "",
     status: "sent", deleted: true, expires_at: null, reply_to: null, reactions: [],
+    attachment: null,
   };
   const chat = { type: "direct" } as Conversation;
 
   it("says who deleted it without showing any text", () => {
     expect(previewText({ ...base, sender_id: 1 }, chat, 1, {})).toBe("You deleted this message");
     expect(previewText({ ...base, sender_id: 2 }, chat, 1, {})).toBe("This message was deleted");
+  });
+});
+
+describe("previewText for attachments", () => {
+  const chat = { type: "direct" } as Conversation;
+  const base: Message = {
+    id: 1, conversation_id: 1, sender_id: 2, type: "text", body: "", client_id: null,
+    created_at: "", status: "sent", deleted: false, expires_at: null, reply_to: null,
+    reactions: [],
+    attachment: { id: 1, filename: "notes.pdf", content_type: "application/pdf", size: 10, is_image: false, width: null, height: null },
+  };
+
+  it("names the file when there is no caption", () => {
+    expect(previewText(base, chat, 1, {})).toBe("📎 notes.pdf");
+    expect(previewText({ ...base, attachment: { ...base.attachment!, is_image: true } }, chat, 1, {})).toBe("📷 Photo");
+  });
+
+  it("shows the caption with a marker when there is one", () => {
+    expect(previewText({ ...base, body: "the plan" }, chat, 1, {})).toBe("📎 the plan");
+    expect(previewText({ ...base, body: "the plan", sender_id: 1 }, chat, 1, {})).toBe("You: 📎 the plan");
   });
 });

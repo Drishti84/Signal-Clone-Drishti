@@ -17,6 +17,18 @@ export type MessageStatus = "sending" | "sent" | "delivered" | "read" | "failed"
 
 export type ReactionGroup = { emoji: string; user_ids: number[] };
 
+export type Attachment = {
+  id: number;
+  filename: string;
+  content_type: string;
+  size: number;
+  is_image: boolean;
+  width: number | null;
+  height: number | null;
+  /** Browser-only: a preview of a file we are sending or have just sent. */
+  local_url?: string;
+};
+
 export type ReplyPreview = {
   id: number;
   sender_id: number | null;
@@ -39,6 +51,7 @@ export type Message = {
   expires_at: string | null;
   reply_to: ReplyPreview | null;
   reactions: ReactionGroup[];
+  attachment: Attachment | null;
 };
 
 export type Member = { user: User; role: "admin" | "member"; joined_at: string };

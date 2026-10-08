@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, utcnow
@@ -40,6 +40,8 @@ class Message(Base):
     reactions: Mapped[list["Reaction"]] = relationship(
         cascade="all, delete-orphan", lazy="selectin", order_by="Reaction.id",
         passive_deletes=True)
+    attachment: Mapped["Attachment | None"] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", passive_deletes=True)
 
 
 class MessageReceipt(Base):
@@ -65,4 +67,30 @@ class Reaction(Base):
         ForeignKey("messages.id", ondelete="CASCADE"), index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     emoji: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class Attachment(Base):
+    """One image or file sent with a message.
+
+    It is uploaded first, on its own, and has no message yet; sending the
+    message then claims it. The bytes live here and not on the message so
+    that loading messages never reads file data."""
+
+    __tablename__ = "attachments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True)
+    uploader_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    # Null until the message is sent; unique, so a file belongs to one message.
+    message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("messages.id", ondelete="CASCADE"), unique=True)
+    filename: Mapped[str] = mapped_column(String(120))
+    content_type: Mapped[str] = mapped_column(String(100))
+    size: Mapped[int] = mapped_column()
+    is_image: Mapped[bool] = mapped_column(default=False)
+    width: Mapped[int | None] = mapped_column()
+    height: Mapped[int | None] = mapped_column()
+    data: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
