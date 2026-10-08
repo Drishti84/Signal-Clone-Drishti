@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.database import init_db
 from app.errors import ServiceError
-from app.routers import auth, users
+from app.routers import auth, contacts, users
 
 
 @asynccontextmanager
@@ -33,6 +33,7 @@ async def service_error_handler(_request: Request, exc: ServiceError):
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(contacts.router)
 
 
 @app.get("/health")
