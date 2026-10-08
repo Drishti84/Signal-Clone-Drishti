@@ -5,14 +5,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.database import init_db
+from app.database import SessionLocal, init_db
 from app.errors import ServiceError
 from app.routers import auth, contacts, conversations, messages, users, ws
+from app.seed import seed_if_empty
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
+    if settings.seed_on_startup:
+        # Does nothing once the database has users, so restarts are safe.
+        with SessionLocal() as db:
+            seed_if_empty(db)
+            db.commit()
     yield
 
 
