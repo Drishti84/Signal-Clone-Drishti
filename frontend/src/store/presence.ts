@@ -60,8 +60,11 @@ export const usePresence = create<PresenceState>((set, get) => ({
 const NOBODY: number[] = [];
 
 /** Ids of the people typing in a conversation right now. */
-export function typingUserIds(state: PresenceState, conversationId: number): number[] {
-  const entries = state.typing[conversationId];
+export function typingUserIds(
+  typing: PresenceState["typing"],
+  conversationId: number,
+): number[] {
+  const entries = typing[conversationId];
   if (!entries) return NOBODY;
   const ids = Object.keys(entries).map(Number);
   return ids.length ? ids : NOBODY;

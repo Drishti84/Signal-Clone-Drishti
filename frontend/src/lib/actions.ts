@@ -11,6 +11,7 @@ export function selectConversation(id: number | null): void {
   const ui = useUi.getState();
   ui.setView("chats");
   ui.setReplyTo(null);
+  useUi.setState({ jumpTo: null });
   if (id === null) ui.setDetailsOpen(false);
 }
 

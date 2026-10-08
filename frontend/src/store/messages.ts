@@ -97,25 +97,25 @@ export const useMessages = create<MessagesState>((set, get) => {
     firstUnread: {},
 
     loadLatest: async (conversationId) => {
-      const page = await api.get<MessagePage>(`/api/conversations/${conversationId}/messages`);
-      const meId = useAuth.getState().user?.id ?? -1;
+      // Read before the request: opening a chat marks it read soon after, and
+      // the divider must reflect what was unread at the moment of opening.
       const unread = useConversations.getState().byId[conversationId]?.unread_count ?? 0;
+      const meId = useAuth.getState().user?.id ?? -1;
+      const page = await api.get<MessagePage>(`/api/conversations/${conversationId}/messages`);
       set((state) => {
-        const firstOpen = state.byConversation[conversationId] === undefined;
+        const existing = state.byConversation[conversationId];
+        const merged = merge(existing ?? [], page.messages);
         return {
-          byConversation: {
-            ...state.byConversation,
-            [conversationId]: merge(state.byConversation[conversationId] ?? [], page.messages),
-          },
-          hasMore: firstOpen
-            ? { ...state.hasMore, [conversationId]: page.has_more }
-            : state.hasMore,
-          firstUnread: {
-            ...state.firstUnread,
-            [conversationId]: firstOpen
-              ? firstUnreadId(page.messages, unread, meId)
-              : (state.firstUnread[conversationId] ?? null),
-          },
+          byConversation: { ...state.byConversation, [conversationId]: merged },
+          // Older pages already loaded stay loaded, so keep what we knew.
+          hasMore:
+            existing === undefined
+              ? { ...state.hasMore, [conversationId]: page.has_more }
+              : state.hasMore,
+          firstUnread:
+            unread > 0
+              ? { ...state.firstUnread, [conversationId]: firstUnreadId(merged, unread, meId) }
+              : state.firstUnread,
         };
       });
     },

@@ -1,5 +1,6 @@
 import type { ServerEvent } from "@/lib/types";
 import { useAuth } from "@/store/auth";
+import { useContacts } from "@/store/contacts";
 import { useConversations } from "@/store/conversations";
 import { useMessages } from "@/store/messages";
 import { usePresence } from "@/store/presence";
@@ -77,6 +78,7 @@ export function handleServerEvent(event: ServerEvent): void {
 /** Forget everything about the signed-in user (logout or expired session). */
 export function resetStores(): void {
   useConversations.getState().reset();
+  useContacts.getState().reset();
   useMessages.getState().reset();
   usePresence.getState().reset();
   useUi.getState().reset();

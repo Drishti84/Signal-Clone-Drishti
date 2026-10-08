@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* `dark:` follows our own theme switch, not only the OS setting. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /* Signal's palette as CSS variables. The dark block overrides only what
    changes; components never hard-code a colour. */
 :root {
@@ -102,6 +105,11 @@ button:disabled {
   scrollbar-color: var(--fg-3) transparent;
 }
 
+/* A sender's name in a group chat uses their avatar colour: the strong
+   shade on light bubbles, the pale shade on dark ones. */
+.sender-name { color: var(--name-light); }
+[data-theme="dark"] .sender-name { color: var(--name-dark); }
+
 @keyframes typing-dot {
   0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
   30% { opacity: 1; transform: translateY(-2px); }
@@ -132,4 +140,11 @@ button:disabled {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Text fields show focus through their own border or ring. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
 }
