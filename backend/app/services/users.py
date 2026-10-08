@@ -45,6 +45,13 @@ def get_avatar(db: Db, user_id: int) -> UserAvatar:
     return avatar
 
 
+def get_user(db: Db, user_id: int) -> User:
+    user = db.get(User, user_id)
+    if user is None:
+        raise NotFound("User not found")
+    return user
+
+
 def search(db: Db, me: User, q: str | None) -> list[User]:
     """Registered users who finished onboarding, excluding the caller."""
     query = select(User).where(User.id != me.id, User.display_name.is_not(None))

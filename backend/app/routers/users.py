@@ -1,4 +1,6 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, Response, UploadFile
+import hashlib
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Response, UploadFile
 from sqlalchemy.orm import Session as Db
 
 from app.constants import AVATAR_MAX_BYTES
@@ -48,8 +50,7 @@ def update_me(body: ProfileUpdate, background: BackgroundTasks,
 @router.put("/me/avatar", response_model=UserOut)
 def upload_avatar(file: UploadFile, background: BackgroundTasks,
                   me: User = Depends(get_current_user), db: Db = Depends(get_db)):
-    # Read one byte past the limit: enough to know it is too big, without
-    # pulling an arbitrarily large upload into memory.
+    # One byte past the limit is enough to know the photo is too big.
     data = file.file.read(AVATAR_MAX_BYTES + 1)
     users.set_avatar(db, me, data)
     return _profile_changed(db, me, background)
@@ -68,10 +69,22 @@ def lookup(phone: str, _me: User = Depends(get_current_user), db: Db = Depends(g
     return user_out(user, manager.online_ids())
 
 
+@router.get("/{user_id}", response_model=UserOut)
+def get_user(user_id: int, _me: User = Depends(get_current_user), db: Db = Depends(get_db)):
+    """Used to show the name of someone who wrote in a chat but has since left it."""
+    return user_out(users.get_user(db, user_id), manager.online_ids())
+
+
 @router.get("/{user_id}/avatar")
-def get_avatar(user_id: int, db: Db = Depends(get_db)):
-    """Public on purpose: an <img> tag cannot send the auth header. The
-    version in the URL changes with every upload, so caching forever is safe."""
+def get_avatar(user_id: int, if_none_match: str | None = Header(default=None),
+               db: Db = Depends(get_db)):
+    """Public on purpose: an <img> tag cannot send the auth header.
+
+    The browser may keep the photo but must check it is still current (an
+    ETag built from the image bytes), so a replaced photo is never shown stale."""
     avatar = users.get_avatar(db, user_id)
-    return Response(content=avatar.data, media_type=avatar.content_type,
-                    headers={"Cache-Control": "public, max-age=31536000, immutable"})
+    etag = f'"{hashlib.sha256(avatar.data).hexdigest()[:32]}"'
+    headers = {"Cache-Control": "no-cache", "ETag": etag}
+    if if_none_match == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=avatar.data, media_type=avatar.content_type, headers=headers)

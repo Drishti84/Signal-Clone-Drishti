@@ -34,30 +34,30 @@ export function SettingsDialog() {
 
   return (
     <Modal title="Settings" onClose={() => openDialog(null)} width={720}>
-      <div className="flex h-[480px] border-t border-border">
-        <nav className="flex w-[200px] shrink-0 flex-col gap-0.5 border-r border-border p-2">
+      <div className="flex h-[480px] border-t border-border max-md:h-[72dvh] max-md:flex-col">
+        <nav className="flex shrink-0 gap-0.5 border-border p-2 max-md:overflow-x-auto max-md:border-b md:w-[200px] md:flex-col md:border-r">
           {SECTIONS.map(({ id, label, Icon }) => (
             <button
               key={id}
               type="button"
               onClick={() => setSection(id)}
               aria-current={section === id ? "page" : undefined}
-              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left ${section === id ? "bg-selected font-medium" : "hover:bg-hover"}`}
+              className={`flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-left ${section === id ? "bg-selected font-medium" : "hover:bg-hover"}`}
             >
               <Icon size={17} /> {label}
             </button>
           ))}
-          <div className="flex-1" />
+          <div className="flex-1 max-md:hidden" />
           <button
             type="button"
             onClick={() => void logout()}
-            className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-danger hover:bg-hover"
+            className="flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-left text-danger hover:bg-hover"
           >
             <LogOut size={17} /> Log out
           </button>
         </nav>
 
-        <div className="min-w-0 flex-1 overflow-y-auto p-6">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-6 max-md:p-4">
           {section === "profile" && <ProfileSection />}
           {section === "appearance" && <AppearanceSection />}
           {section === "privacy" && (

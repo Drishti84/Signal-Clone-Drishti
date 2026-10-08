@@ -38,6 +38,9 @@ To register a new account, enter any phone number and use the code **123456**.
 - Emoji reactions (one per person per message, replace or remove)
 - Reply with a quoted message; clicking the quote jumps to the original
 - Dark mode (System / Light / Dark), remembered per device
+- Responsive layout: two panes on desktop and tablet; on a phone, the chat list and the open
+  chat take turns on screen, with the tabs along the bottom
+- Keyboard shortcuts (press `Ctrl` + `/` in the app for the list)
 
 **Placeholders ("Coming soon")**
 
@@ -53,7 +56,7 @@ encryption notice, but messages are stored as plain text.
 | Backend | Python, FastAPI, SQLAlchemy 2, Pydantic v2 |
 | Database | SQLite |
 | Real-time | WebSocket (one connection per browser tab) |
-| Tests | pytest (84 backend tests) |
+| Tests | pytest (92 backend tests), Vitest (13 frontend store and helper tests) |
 | Hosting | Vercel (frontend), Render (backend) |
 
 ## Architecture
@@ -124,6 +127,7 @@ backend/
     realtime/        Event and ConnectionManager
     seed.py          demo data
   tests/             pytest suite
+  requirements.txt   pinned runtime dependencies (requirements-dev.txt adds the test tools)
 frontend/
   src/
     app/             routes: /login and /
@@ -149,8 +153,8 @@ erDiagram
     messages ||--o{ messages : "replies to"
 ```
 
-Every table has an integer primary key `id` and a `created_at` timestamp (UTC).
-Foreign keys are enforced.
+Every table except `user_avatars` (keyed by `user_id`) has an integer primary key `id`.
+Timestamps are stored in UTC. Foreign keys are enforced.
 
 | Table | Columns | Notes |
 |---|---|---|
@@ -178,15 +182,16 @@ Foreign keys are enforced.
   messages after the marker, with no per-message bookkeeping, and the marker only moves forward.
 - **`messages.client_id`** with a unique constraint per sender makes sending idempotent.
 - **`user_avatars` is a separate table** with the image bytes loaded lazily, so listing users
-  never reads image data. `users.avatar_version` goes into the image URL, so browsers can cache
-  a photo forever and still pick up a new one immediately.
+  never reads image data. `users.avatar_version` goes into the image URL so a new photo shows
+  up immediately, and the image is served with an ETag so browsers re-check it cheaply.
 - **System messages** ("Asha created the group") are rows in `messages` with `type = system`,
   so they sort and paginate with everything else, but they have no receipts and never count as unread.
 
 ## API overview
 
 Base path `/api`. Everything except the first three auth routes and the avatar image needs
-`Authorization: Bearer <token>`. Errors are `{ "detail": "..." }`. Interactive documentation is
+`Authorization: Bearer <token>`, and contacts, conversations and messages also need a finished
+profile. Errors are `{ "detail": "..." }`. Interactive documentation is
 served at `/docs` on the backend.
 
 **Auth and profile**
@@ -199,6 +204,7 @@ served at `/docs` on the backend.
 | POST | `/auth/logout` | End the current session |
 | GET / PATCH | `/users/me` | Read or update my profile |
 | PUT / DELETE | `/users/me/avatar` | Upload or remove my photo |
+| GET | `/users/{id}` | One user (used for people who have left a chat) |
 | GET | `/users/{id}/avatar` | A user's photo |
 | GET | `/users?q=` | Search registered users |
 | GET | `/users/lookup?phone=` | Find one user by phone number |
@@ -266,7 +272,7 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 The first start creates `backend/signal.db` and fills it with demo data. Delete that file
-to reset. Run the tests with `pytest`.
+to reset. To run the tests: `pip install -r requirements-dev.txt`, then `pytest`.
 
 **Frontend**
 
@@ -277,7 +283,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000. Run the frontend tests with `npm test`.
 
 **Environment variables**
 
@@ -286,6 +292,7 @@ Open http://localhost:3000.
 | Backend | `DATABASE_URL` | `sqlite:///./signal.db` | Database location |
 | Backend | `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated frontend origins |
 | Backend | `SEED_ON_STARTUP` | `true` | Seed demo data when the database is empty |
+| Backend | `CORS_ORIGIN_REGEX` | unset | Optional pattern for extra origins, such as preview deployments |
 | Backend | `DEFAULT_COUNTRY_CODE` | `+91` | Added to bare 10-digit numbers |
 | Frontend | `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend address |
 | Frontend | `NEXT_PUBLIC_WS_URL` | derived from the API URL | WebSocket address |
@@ -312,15 +319,19 @@ read, delivered and unsent states, so every badge and check mark has something t
   for as long as it stays up. Run locally, the database file persists normally.
 - **One backend process.** Open sockets are tracked in memory. Running several instances
   would need a shared message bus (for example Redis pub/sub) between them.
-- **Desktop layout only.** The UI follows Signal Desktop and expects a window at least 900 px wide.
+- **The design target is Signal Desktop.** Phones and tablets get a working single-pane
+  layout, but it is an adaptation of the desktop design, not a copy of Signal's mobile apps.
+- **Browser shortcuts win.** Signal Desktop uses `Ctrl+N` for a new chat; a web page cannot
+  take that key from the browser, so this app uses `Alt+N` and similar combinations.
 - **A bare 10-digit number is treated as Indian** (`+91`). Other countries need the country code.
 - **A group message is "read" only when everyone has read it**, and a person removed from a
-  group loses access to it entirely.
+  group loses access to it entirely. Someone added to a group can read its earlier messages,
+  which do not count as unread for them.
 - **Avatar photos** are cropped to a square and shrunk to 256 × 256 in the browser, and are
   limited to 256 KB.
 
 ## What I would add next
 
-Attachments, functional disappearing messages, a mobile layout, keyboard shortcuts, message
-editing and deletion, and a persistent database with a shared pub/sub layer for multiple
-backend instances.
+Attachments, functional disappearing messages, message editing and deletion, catching up on
+more than one page of missed messages after a long disconnect, and a persistent database with
+a shared pub/sub layer for multiple backend instances.

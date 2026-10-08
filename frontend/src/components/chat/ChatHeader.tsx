@@ -1,10 +1,11 @@
 "use client";
 
-import { Info, Phone, Search, Video } from "lucide-react";
+import { ArrowLeft, Info, Phone, Search, Video } from "lucide-react";
 
 import { Avatar } from "@/components/ui/Avatar";
 import { IconButton } from "@/components/ui/IconButton";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import { selectConversation } from "@/lib/actions";
 import { conversationTitle, displayName, lastSeen, otherMember } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
 import type { Conversation } from "@/lib/types";
@@ -42,7 +43,10 @@ export function ChatHeader({ conversation, meId }: Props) {
   }
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-1 border-b border-border px-4">
+    <header className="flex h-14 shrink-0 items-center gap-1 border-b border-border px-4 max-md:px-2">
+      <IconButton label="Back to chats" className="md:hidden" onClick={() => selectConversation(null)}>
+        <ArrowLeft size={20} />
+      </IconButton>
       <button
         type="button"
         onClick={() => setDetailsOpen(!detailsOpen)}
@@ -69,7 +73,7 @@ export function ChatHeader({ conversation, meId }: Props) {
       <IconButton label="Voice call" onClick={() => toast("Voice calls are coming soon")}>
         <Phone size={18} />
       </IconButton>
-      <IconButton label="Search" onClick={focusSearch}>
+      <IconButton label="Search" className="max-md:hidden" onClick={focusSearch}>
         <Search size={18} />
       </IconButton>
       <IconButton

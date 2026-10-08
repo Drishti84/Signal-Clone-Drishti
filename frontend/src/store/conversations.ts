@@ -27,9 +27,12 @@ const inFlight = new Map<number, Promise<void>>();
 export const leaving = new Set<number>();
 
 function rememberUsers(conversations: Conversation[]) {
-  usePresence.getState().upsertUsers(
+  const presence = usePresence.getState();
+  presence.upsertUsers(
     conversations.flatMap((conversation) => conversation.members.map((member) => member.user)),
   );
+  // The newest message may be from someone who is no longer a member.
+  presence.ensureUsers(conversations.map((c) => c.last_message?.sender_id ?? null));
 }
 
 export const useConversations = create<ConversationsState>((set, get) => ({

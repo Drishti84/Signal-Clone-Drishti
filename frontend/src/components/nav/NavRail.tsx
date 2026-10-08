@@ -14,8 +14,9 @@ const TABS: { view: View; label: string; Icon: LucideIcon }[] = [
 ];
 
 /** The narrow strip on the far left: section tabs on top, settings and
- * your own profile at the bottom. */
-export function NavRail() {
+ * your own profile at the bottom. On a phone it becomes a bar of tabs along
+ * the bottom of the screen, as in Signal's mobile app. */
+export function NavRail({ hiddenOnMobile }: { hiddenOnMobile: boolean }) {
   const view = useUi((state) => state.view);
   const setView = useUi((state) => state.setView);
   const openDialog = useUi((state) => state.openDialog);
@@ -25,7 +26,9 @@ export function NavRail() {
   );
 
   return (
-    <nav className="flex w-[72px] shrink-0 flex-col items-center gap-1 border-r border-border bg-pane py-3">
+    <nav
+      className={`flex shrink-0 items-center gap-1 border-border bg-pane max-md:h-14 max-md:justify-around max-md:border-t max-md:px-2 md:w-[72px] md:flex-col md:border-r md:py-3 ${hiddenOnMobile ? "max-md:hidden" : ""}`}
+    >
       {TABS.map(({ view: tab, label, Icon }) => (
         <button
           key={tab}
@@ -45,7 +48,7 @@ export function NavRail() {
         </button>
       ))}
 
-      <div className="flex-1" />
+      <div className="flex-1 max-md:hidden" />
 
       <button
         type="button"
@@ -61,7 +64,7 @@ export function NavRail() {
         aria-label="Your profile"
         title="Your profile"
         onClick={() => openDialog("settings")}
-        className="mt-1 rounded-full"
+        className="rounded-full md:mt-1"
       >
         <UserAvatar user={me} size={32} />
       </button>

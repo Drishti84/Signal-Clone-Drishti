@@ -33,7 +33,7 @@ export function Modal({ title, onClose, onBack, width = 400, children, footer }:
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-overlay p-6"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-overlay p-6 max-md:p-3"
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
       <div
@@ -42,7 +42,7 @@ export function Modal({ title, onClose, onBack, width = 400, children, footer }:
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className="animate-pop-in flex max-h-[calc(100vh-48px)] w-full flex-col overflow-hidden rounded-xl bg-surface shadow-pop outline-none"
+        className="animate-pop-in flex max-h-[calc(100dvh-48px)] max-md:max-h-[calc(100dvh-24px)] w-full flex-col overflow-hidden rounded-xl bg-surface shadow-pop outline-none"
         style={{ maxWidth: width }}
       >
         <header className="flex h-14 shrink-0 items-center gap-1 px-3">

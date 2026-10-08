@@ -4,6 +4,8 @@ import { api } from "@/lib/api";
 import type { Message, MessagePage, MessageStatus, ReactionGroup } from "@/lib/types";
 import { useAuth } from "@/store/auth";
 import { useConversations } from "@/store/conversations";
+import { usePresence } from "@/store/presence";
+import { useUi } from "@/store/ui";
 
 type MessagesState = {
   /** Oldest first. Messages still being sent sit at the end with negative ids. */
@@ -62,19 +64,34 @@ function firstUnreadId(messages: Message[], unreadCount: number, meId: number): 
 function isBeingViewed(conversationId: number): boolean {
   return (
     useConversations.getState().activeId === conversationId &&
+    useUi.getState().view === "chats" && // Calls and Stories hide the open chat
     document.visibilityState === "visible" &&
     document.hasFocus()
   );
 }
 
 export const useMessages = create<MessagesState>((set, get) => {
-  const replace = (conversationId: number, update: (messages: Message[]) => Message[]) =>
-    set((state) => ({
-      byConversation: {
-        ...state.byConversation,
-        [conversationId]: update(state.byConversation[conversationId] ?? []),
-      },
-    }));
+  /** Change a chat's loaded messages. A chat that has not been opened yet is
+   * left alone (its history will come from the server when it is opened),
+   * unless `create` says this change is what starts the list. */
+  const replace = (
+    conversationId: number,
+    update: (messages: Message[]) => Message[],
+    create = false,
+  ) =>
+    set((state) => {
+      const current = state.byConversation[conversationId];
+      if (current === undefined && !create) return state;
+      return {
+        byConversation: { ...state.byConversation, [conversationId]: update(current ?? []) },
+      };
+    });
+
+  /** Messages can come from people who have since left the chat. */
+  const rememberSenders = (messages: Message[]) =>
+    usePresence.getState().ensureUsers(
+      messages.flatMap((message) => [message.sender_id, message.reply_to?.sender_id ?? null]),
+    );
 
   const post = async (conversationId: number, message: Message) => {
     try {
@@ -85,9 +102,17 @@ export const useMessages = create<MessagesState>((set, get) => {
       });
       get().applyNew(saved);
     } catch {
+      // Only a bubble that is still unsaved has failed. If the socket already
+      // delivered the saved copy, the message went through.
+      const stillUnsaved = (m: Message) => m.client_id === message.client_id && m.id < 0;
       replace(conversationId, (messages) =>
-        messages.map((m) => (m.client_id === message.client_id ? { ...m, status: "failed" } : m)),
+        messages.map((m) => (stillUnsaved(m) ? { ...m, status: "failed" } : m)),
       );
+      const conversations = useConversations.getState();
+      const last = conversations.byId[conversationId]?.last_message;
+      if (last && stillUnsaved(last)) {
+        conversations.patch(conversationId, { last_message: { ...last, status: "failed" } });
+      }
     }
   };
 
@@ -109,7 +134,7 @@ export const useMessages = create<MessagesState>((set, get) => {
           byConversation: { ...state.byConversation, [conversationId]: merged },
           // Older pages already loaded stay loaded, so keep what we knew.
           hasMore:
-            existing === undefined
+            state.hasMore[conversationId] === undefined
               ? { ...state.hasMore, [conversationId]: page.has_more }
               : state.hasMore,
           firstUnread:
@@ -118,6 +143,7 @@ export const useMessages = create<MessagesState>((set, get) => {
               : state.firstUnread,
         };
       });
+      rememberSenders(page.messages);
     },
 
     loadOlder: async (conversationId) => {
@@ -129,6 +155,7 @@ export const useMessages = create<MessagesState>((set, get) => {
       );
       replace(conversationId, (messages) => merge(messages, page.messages));
       set((state) => ({ hasMore: { ...state.hasMore, [conversationId]: page.has_more } }));
+      rememberSenders(page.messages);
       return page.messages.length > 0;
     },
 
@@ -150,7 +177,7 @@ export const useMessages = create<MessagesState>((set, get) => {
           : null,
         reactions: [],
       };
-      replace(conversationId, (messages) => [...messages, optimistic]);
+      replace(conversationId, (messages) => [...messages, optimistic], true);
       get().clearUnreadDivider(conversationId);
       useConversations.getState().patch(conversationId, {
         last_message: optimistic,
@@ -183,6 +210,7 @@ export const useMessages = create<MessagesState>((set, get) => {
         return;
       }
 
+      rememberSenders([message]);
       const loaded = get().byConversation[conversationId] !== undefined;
       let alreadyHad = false;
       if (loaded) {

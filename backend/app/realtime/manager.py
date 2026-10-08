@@ -36,7 +36,9 @@ class ConnectionManager:
         return bool(self._sockets.get(user_id))
 
     def online_ids(self) -> set[int]:
-        return {user_id for user_id, sockets in self._sockets.items() if sockets}
+        # list() first: request threads call this while the event loop may be
+        # adding or removing sockets.
+        return {user_id for user_id, sockets in list(self._sockets.items()) if sockets}
 
     async def dispatch(self, events: list[Event]) -> None:
         for event in events:

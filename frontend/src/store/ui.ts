@@ -5,7 +5,7 @@ import type { Message } from "@/lib/types";
 
 export type Theme = "system" | "light" | "dark";
 export type View = "chats" | "calls" | "stories";
-export type Dialog = null | "new-chat" | "new-group" | "settings";
+export type Dialog = null | "new-chat" | "new-group" | "settings" | "shortcuts";
 export type Toast = { id: number; message: string; kind: "info" | "error" };
 
 export const THEME_KEY = "signal-clone-theme";

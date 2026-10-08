@@ -1,6 +1,6 @@
 "use client";
 
-import { ListFilter, MoreHorizontal, Search, Settings, SquarePen, Users, X } from "lucide-react";
+import { Keyboard, ListFilter, MoreHorizontal, Search, Settings, SquarePen, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ConversationRow } from "@/components/conversations/ConversationRow";
@@ -26,7 +26,7 @@ function typingText(conversation: Conversation, ids: number[], users: Record<num
 }
 
 /** The left pane: header, search, unread filter and the list of chats. */
-export function ConversationList() {
+export function ConversationList({ hiddenOnMobile }: { hiddenOnMobile: boolean }) {
   const byId = useConversations((state) => state.byId);
   const activeId = useConversations((state) => state.activeId);
   const loaded = useConversations((state) => state.loaded);
@@ -79,7 +79,9 @@ export function ConversationList() {
   const matchedPeople = term && people?.query === term ? people.users : null;
 
   return (
-    <aside className="flex w-[320px] shrink-0 flex-col border-r border-border bg-pane">
+    <aside
+      className={`flex min-h-0 flex-col border-border bg-pane max-md:flex-1 md:w-[280px] md:shrink-0 md:border-r lg:w-[320px] ${hiddenOnMobile ? "max-md:hidden" : ""}`}
+    >
       <header className="flex h-14 shrink-0 items-center gap-1 px-4">
         <h1 className="flex-1 text-xl font-semibold">Chats</h1>
         <IconButton label="New chat" onClick={() => openDialog("new-chat")}>
@@ -94,6 +96,7 @@ export function ConversationList() {
           items={[
             { label: "New group", icon: <Users size={16} />, onSelect: () => openDialog("new-group") },
             { label: "Settings", icon: <Settings size={16} />, onSelect: () => openDialog("settings") },
+            { label: "Keyboard shortcuts", icon: <Keyboard size={16} />, onSelect: () => openDialog("shortcuts") },
           ]}
         />
       </header>

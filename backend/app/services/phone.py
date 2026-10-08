@@ -8,7 +8,9 @@ def normalize_phone(raw: str) -> str:
     """Return E.164. Accepts spaces, dashes and brackets; a bare 10-digit
     number gets the default country code."""
     cleaned = re.sub(r"[\s\-()]", "", raw or "")
-    if not re.fullmatch(r"\+?\d+", cleaned):
+    # [0-9] and not \d: \d also matches digits from other scripts, which would
+    # let one phone number be registered under several spellings.
+    if not re.fullmatch(r"\+?[0-9]+", cleaned):
         raise BadRequest("Enter a valid phone number")
     if not cleaned.startswith("+"):
         if len(cleaned) != 10:

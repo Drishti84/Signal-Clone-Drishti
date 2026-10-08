@@ -3,6 +3,12 @@ import { useAuth } from "@/store/auth";
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 export const WS_URL = (process.env.NEXT_PUBLIC_WS_URL ?? API_URL.replace(/^http/, "ws")).replace(/\/$/, "");
 
+if (process.env.NODE_ENV === "production" && !process.env.NEXT_PUBLIC_API_URL) {
+  // NEXT_PUBLIC_* values are fixed at build time; without this the app
+  // would silently talk to localhost.
+  console.error("NEXT_PUBLIC_API_URL is not set; the app cannot reach its backend.");
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,

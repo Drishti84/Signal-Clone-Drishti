@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import { api } from "@/lib/api";
 import { TYPING_EXPIRY_MS } from "@/lib/constants";
 import type { User } from "@/lib/types";
 
@@ -10,10 +11,15 @@ type PresenceState = {
   /** conversation id -> user id -> time the typing indicator expires. */
   typing: Record<number, Record<number, number>>;
   upsertUsers: (users: User[]) => void;
+  /** Fetch any of these users we do not know yet (for example someone who
+   * wrote in a group and has since left it). */
+  ensureUsers: (ids: (number | null)[]) => void;
   setPresence: (userId: number, isOnline: boolean, lastSeenAt: string | null) => void;
   setTyping: (conversationId: number, userId: number, isTyping: boolean) => void;
   reset: () => void;
 };
+
+const requested = new Set<number>();
 
 export const usePresence = create<PresenceState>((set, get) => ({
   users: {},
@@ -26,6 +32,17 @@ export const usePresence = create<PresenceState>((set, get) => ({
       for (const user of incoming) users[user.id] = user;
       return { users };
     });
+  },
+
+  ensureUsers: (ids) => {
+    for (const id of new Set(ids)) {
+      if (id === null || get().users[id] || requested.has(id)) continue;
+      requested.add(id);
+      api
+        .get<User>(`/api/users/${id}`)
+        .then((user) => get().upsertUsers([user]))
+        .catch(() => requested.delete(id)); // allow another try later
+    }
   },
 
   setPresence: (userId, isOnline, lastSeenAt) =>
@@ -54,7 +71,10 @@ export const usePresence = create<PresenceState>((set, get) => ({
     }, TYPING_EXPIRY_MS);
   },
 
-  reset: () => set({ users: {}, typing: {} }),
+  reset: () => {
+    requested.clear();
+    set({ users: {}, typing: {} });
+  },
 }));
 
 const NOBODY: number[] = [];

@@ -8,12 +8,17 @@ import { ConversationList } from "@/components/conversations/ConversationList";
 import { NewChatDialog } from "@/components/dialogs/NewChatDialog";
 import { NewGroupDialog } from "@/components/dialogs/NewGroupDialog";
 import { SettingsDialog } from "@/components/dialogs/SettingsDialog";
+import { ShortcutsDialog } from "@/components/dialogs/ShortcutsDialog";
 import { NavRail } from "@/components/nav/NavRail";
+import { useShortcuts } from "@/lib/shortcuts";
 import { useAuth } from "@/store/auth";
 import { useConversations } from "@/store/conversations";
 import { useUi } from "@/store/ui";
 
-/** The main window: nav rail, chat list, and the open chat. */
+/** The main window: nav rail, chat list, and the open chat.
+ *
+ * On a phone (under 768px) only one of the three is on screen at a time:
+ * the chat list with the tabs along the bottom, or the open chat. */
 export function Home() {
   const meId = useAuth((state) => state.user?.id ?? -1);
   const view = useUi((state) => state.view);
@@ -21,14 +26,17 @@ export function Home() {
   const active = useConversations((state) =>
     state.activeId !== null ? state.byId[state.activeId] : undefined,
   );
+  useShortcuts();
+  // On a phone an open chat takes the whole screen.
+  const chatOpen = view === "chats" && !!active;
 
   return (
-    <div className="flex h-full min-w-[900px]">
-      <NavRail />
+    <div className="flex h-dvh max-md:flex-col-reverse">
+      <NavRail hiddenOnMobile={chatOpen} />
 
       {view === "chats" && (
         <>
-          <ConversationList />
+          <ConversationList hiddenOnMobile={chatOpen} />
           {active ? <ChatPane key={active.id} conversation={active} meId={meId} /> : <EmptyState />}
         </>
       )}
@@ -50,6 +58,7 @@ export function Home() {
       {dialog === "new-chat" && <NewChatDialog />}
       {dialog === "new-group" && <NewGroupDialog />}
       {dialog === "settings" && <SettingsDialog />}
+      {dialog === "shortcuts" && <ShortcutsDialog />}
     </div>
   );
 }

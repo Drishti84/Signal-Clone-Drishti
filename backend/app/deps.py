@@ -17,3 +17,11 @@ def get_current_user(token: str = Depends(get_token), db: Db = Depends(get_db)) 
     if user is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return user
+
+
+def get_profiled_user(user: User = Depends(get_current_user)) -> User:
+    """A signed-in user who has finished onboarding. Everything social
+    (contacts, chats, messages) needs a display name to show to others."""
+    if user.display_name is None:
+        raise HTTPException(status_code=403, detail="Finish setting up your profile first")
+    return user

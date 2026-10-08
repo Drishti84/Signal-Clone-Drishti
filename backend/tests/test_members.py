@@ -166,3 +166,33 @@ def test_membership_changes_are_pushed_live(client):
         client.delete(f"{base}/members/{meera['id']}", headers=ha)
         assert next_of_type(meera_ws, "conversation.removed") == {"conversation_id": g["id"]}
         assert len(next_of_type(rohan_ws, "conversation.updated")["conversation"]["members"]) == 3
+
+
+def test_member_added_later_does_not_get_old_messages_as_unread(client):
+    g = make_group(client)
+    ha, _ = g["asha"]
+    hk, kabir = g["kabir"]
+    for text in ("one", "two", "three"):
+        client.post(f"/api/conversations/{g['id']}/messages", headers=ha,
+                    json={"body": text, "client_id": str(uuid.uuid4())})
+    client.post(f"/api/conversations/{g['id']}/members", headers=ha,
+                json={"user_ids": [kabir["id"]]})
+    listed = client.get("/api/conversations", headers=hk).json()
+    assert listed[0]["id"] == g["id"] and listed[0]["unread_count"] == 0
+    client.post(f"/api/conversations/{g['id']}/messages", headers=ha,
+                json={"body": "four", "client_id": str(uuid.uuid4())})
+    assert client.get("/api/conversations", headers=hk).json()[0]["unread_count"] == 1
+
+
+def test_removing_the_last_unread_member_tells_the_sender_it_is_read(client):
+    g = make_group(client)
+    ha, _ = g["asha"]
+    hr, _ = g["rohan"]
+    meera = g["meera"][1]
+    msg = client.post(f"/api/conversations/{g['id']}/messages", headers=ha,
+                      json={"body": "hi", "client_id": str(uuid.uuid4())}).json()
+    client.post(f"/api/conversations/{g['id']}/read", headers=hr, json={"message_id": msg["id"]})
+    with connect(client, ha) as asha_ws:
+        client.delete(f"/api/conversations/{g['id']}/members/{meera['id']}", headers=ha)
+        status = next_of_type(asha_ws, "message.status")
+        assert status == {"conversation_id": g["id"], "message_ids": [msg["id"]], "status": "read"}

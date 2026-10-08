@@ -104,3 +104,29 @@ def test_demo_users_lists_only_seeded_accounts(client, db):
     login(client, "9876543210", "Asha")
     names = [u["display_name"] for u in client.get("/api/auth/demo-users").json()]
     assert names == ["Demo"]
+
+
+def test_phone_with_non_ascii_digits_is_rejected():
+    with pytest.raises(BadRequest):
+        normalize_phone("+91٩٨٧٦٥٤٣٢١٠")
+
+
+def test_cors_origins_ignore_trailing_slashes_and_blanks():
+    from app.config import Settings
+    settings = Settings(cors_origins=" https://a.example/ , ,http://localhost:3000")
+    assert settings.cors_origin_list == ["https://a.example", "http://localhost:3000"]
+
+
+def test_user_without_a_profile_cannot_chat_yet(client):
+    headers, _ = login(client, "9876543210")  # verified, but no display name yet
+    _, rohan = login(client, "9000000002", "Rohan")
+    for response in (
+        client.post("/api/conversations/group", headers=headers,
+                    json={"name": "G", "member_ids": [rohan["id"]]}),
+        client.post("/api/conversations/direct", headers=headers, json={"user_id": rohan["id"]}),
+        client.get("/api/conversations", headers=headers),
+        client.post("/api/contacts", headers=headers, json={"user_id": rohan["id"]}),
+    ):
+        assert response.status_code == 403
+        assert response.json() == {"detail": "Finish setting up your profile first"}
+    assert client.get("/api/users/me", headers=headers).status_code == 200

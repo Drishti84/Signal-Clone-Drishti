@@ -90,7 +90,7 @@ export const MessageBubble = memo(function MessageBubble({
         <span className="w-7 shrink-0">{isLast && <UserAvatar user={sender} size={28} />}</span>
       )}
 
-      <div className="relative min-w-0 max-w-[min(62%,540px)]">
+      <div className="relative min-w-0 max-w-[min(62%,540px)] max-md:max-w-[78%]">
         <div
           className={`px-3 py-[7px] ${corners} ${isMine ? "bg-bubble-out text-white" : "bg-bubble-in text-fg"}`}
         >

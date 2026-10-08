@@ -31,7 +31,7 @@ type Props = { conversation: Conversation; meId: number };
 export function DetailsPanel({ conversation, meId }: Props) {
   const setDetailsOpen = useUi((state) => state.setDetailsOpen);
   return (
-    <aside className="flex w-[320px] shrink-0 flex-col border-l border-border bg-bg">
+    <aside className="flex w-[320px] shrink-0 flex-col border-l border-border bg-bg max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-30 max-lg:shadow-pop max-md:w-full">
       <header className="flex h-14 shrink-0 items-center border-b border-border px-3">
         <h2 className="flex-1 pl-1 text-[15px] font-semibold">
           {conversation.type === "group" ? "Group details" : "Contact details"}
@@ -140,7 +140,8 @@ function GroupDetails({ conversation, meId }: Props) {
     if (action.kind === "leave") {
       leaving.add(conversation.id);
       const left = await change(api.del<Conversation | null>(`${base}/members/${meId}`));
-      if (!left) leaving.delete(conversation.id);
+      // Cleared by the socket event; this covers the event never arriving.
+      setTimeout(() => leaving.delete(conversation.id), left ? 10_000 : 0);
       if (left) {
         useConversations.getState().remove(conversation.id);
         selectConversation(null);

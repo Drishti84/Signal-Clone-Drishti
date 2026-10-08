@@ -8,13 +8,13 @@ from app.services.conversations import get_member
 from app.services.serializers import aggregate_status
 
 
-def _status_events(db: Db, receipts: list[MessageReceipt]) -> list[Event]:
-    """Tell each sender the new status of the messages these receipts belong
-    to: one event per (sender, conversation, status)."""
-    if not receipts:
+def status_events(db: Db, message_ids: list[int]) -> list[Event]:
+    """Tell each sender the current status of these messages: one event per
+    (sender, conversation, status). Messages still at "sent" need no event."""
+    if not message_ids:
         return []
     messages = db.scalars(select(Message).where(
-        Message.id.in_([r.message_id for r in receipts])).order_by(Message.id)).all()
+        Message.id.in_(message_ids)).order_by(Message.id)).all()
     grouped: dict[tuple[int, int, str], list[int]] = {}
     for msg in messages:
         key = (msg.sender_id, msg.conversation_id, aggregate_status(msg.receipts))
@@ -22,6 +22,10 @@ def _status_events(db: Db, receipts: list[MessageReceipt]) -> list[Event]:
     return [Event([sender], "message.status",
                   {"conversation_id": conv_id, "message_ids": ids, "status": status})
             for (sender, conv_id, status), ids in grouped.items() if status != "sent"]
+
+
+def _status_events(db: Db, receipts: list[MessageReceipt]) -> list[Event]:
+    return status_events(db, [receipt.message_id for receipt in receipts])
 
 
 def mark_read(db: Db, me: User, conversation_id: int, message_id: int) -> list[Event]:

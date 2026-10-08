@@ -36,6 +36,8 @@ export function MessageList({ conversation, meId }: Props) {
 
   const scroller = useRef<HTMLDivElement>(null);
   const positioned = useRef(false);
+  const dividerShown = useRef(false);
+  const firstIdSeen = useRef<number | undefined>(undefined);
   const stick = useRef(true);
   const heightBeforeOlder = useRef<number | null>(null);
   const loadingOlder = useRef(false);
@@ -53,17 +55,22 @@ export function MessageList({ conversation, meId }: Props) {
     const element = scroller.current;
     if (!element || !messages) return;
 
-    if (!positioned.current) {
+    const firstId = messages[0]?.id;
+    const divider = element.querySelector<HTMLElement>("[data-unread-divider]");
+    // The divider can arrive a moment after the cached messages do.
+    const dividerJustAppeared = !!divider && !dividerShown.current;
+    dividerShown.current = !!divider;
+
+    if (!positioned.current || dividerJustAppeared) {
       // Opening the chat: start at the unread divider, or at the newest message.
       positioned.current = true;
-      const divider = element.querySelector<HTMLElement>("[data-unread-divider]");
       if (divider) {
         element.scrollTop = Math.max(0, divider.offsetTop - 80);
         stick.current = false;
       } else {
         element.scrollTop = element.scrollHeight;
       }
-    } else if (heightBeforeOlder.current !== null) {
+    } else if (heightBeforeOlder.current !== null && firstId !== firstIdSeen.current) {
       // An older page was added above: hold the visible messages in place.
       element.scrollTop += element.scrollHeight - heightBeforeOlder.current;
       heightBeforeOlder.current = null;
@@ -71,7 +78,8 @@ export function MessageList({ conversation, meId }: Props) {
       element.scrollTop = element.scrollHeight;
     }
     lastKeySeen.current = lastKey;
-  }, [messages, lastKey, lastIsMine, someoneTyping]);
+    firstIdSeen.current = firstId;
+  }, [messages, lastKey, lastIsMine, someoneTyping, firstUnread]);
 
   const onScroll = () => {
     const element = scroller.current;
@@ -136,7 +144,7 @@ export function MessageList({ conversation, meId }: Props) {
 
   return (
     <div className="relative min-h-0 flex-1">
-      <div ref={scroller} onScroll={onScroll} className="h-full overflow-y-auto px-5 pb-3">
+      <div ref={scroller} onScroll={onScroll} className="h-full overflow-y-auto px-5 pb-3 max-md:px-3">
         {hasMore ? (
           <div className="flex justify-center py-3 text-fg-2"><Spinner size={16} /></div>
         ) : (

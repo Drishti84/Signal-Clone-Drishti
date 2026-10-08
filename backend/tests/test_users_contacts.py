@@ -109,3 +109,25 @@ def test_presence_audience_is_chat_partners_and_people_who_saved_you(client, db)
     db.commit()
     assert audience(db, asha["id"]) == sorted([rohan["id"], meera["id"]])
     assert audience(db, kabir["id"]) == []
+
+
+def test_any_user_can_be_fetched_by_id_so_old_senders_keep_their_names(client):
+    h_asha, _ = login(client, "9000000001", "Asha")
+    _, rohan = login(client, "9000000002", "Rohan")
+    found = client.get(f"/api/users/{rohan['id']}", headers=h_asha)
+    assert found.status_code == 200 and found.json()["display_name"] == "Rohan"
+    assert client.get("/api/users/9999", headers=h_asha).status_code == 404
+    assert client.get(f"/api/users/{rohan['id']}").status_code == 401
+
+
+def test_avatar_is_revalidated_instead_of_cached_forever(client):
+    headers, me = login(client, "9876543210", "Asha")
+    client.put("/api/users/me/avatar", headers=headers, files={"file": ("a.png", PNG, "image/png")})
+    first = client.get(f"/api/users/{me['id']}/avatar")
+    assert "immutable" not in first.headers["cache-control"]
+    etag = first.headers["etag"]
+    again = client.get(f"/api/users/{me['id']}/avatar", headers={"If-None-Match": etag})
+    assert again.status_code == 304
+    client.put("/api/users/me/avatar", headers=headers, files={"file": ("a.jpg", JPEG, "image/jpeg")})
+    changed = client.get(f"/api/users/{me['id']}/avatar", headers={"If-None-Match": etag})
+    assert changed.status_code == 200 and changed.content == JPEG

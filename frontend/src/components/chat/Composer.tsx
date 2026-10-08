@@ -97,7 +97,7 @@ export function Composer({ conversationId, meId, users }: Props) {
   const hasText = text.trim().length > 0;
 
   return (
-    <div className="shrink-0 px-4 pb-4 pt-1">
+    <div className="shrink-0 px-4 pb-4 pt-1 max-md:px-2 max-md:pb-2">
       {replyTo && (
         <div className="mb-2 flex items-center gap-2 rounded-xl bg-pane py-2 pl-3 pr-2">
           <div className="min-w-0 flex-1 border-l-4 border-accent pl-2">

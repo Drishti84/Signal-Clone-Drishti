@@ -99,3 +99,18 @@ export function formatPhone(phone: string): string {
   const match = /^\+(\d{1,3})(\d{5})(\d{5})$/.exec(phone);
   return match ? `+${match[1]} ${match[2]} ${match[3]}` : phone;
 }
+
+/** Build the number the login form sends, from the chosen country code and
+ * whatever was typed. People paste numbers in many shapes, so:
+ *  - a number typed with its own "+" is used as it is;
+ *  - a leading 0 (the domestic prefix) is dropped;
+ *  - a country code repeated in front of a full number is not doubled. */
+export function composePhone(countryCode: string, typed: string): string {
+  const digits = typed.replace(/\D/g, "");
+  if (typed.trim().startsWith("+")) return `+${digits}`;
+  const code = countryCode.replace(/\D/g, "");
+  let national = digits.replace(/^0+/, "");
+  // More than 10 digits starting with the code means the code was typed too.
+  if (national.length > 10 && national.startsWith(code)) national = national.slice(code.length);
+  return `+${code}${national}`;
+}

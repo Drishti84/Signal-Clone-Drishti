@@ -12,7 +12,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { api, errorMessage } from "@/lib/api";
 import { DEMO_OTP, NAME_MAX_LENGTH } from "@/lib/constants";
-import { formatPhone } from "@/lib/format";
+import { composePhone, formatPhone } from "@/lib/format";
 import { draftFromUser, saveProfile, type AvatarDraft } from "@/lib/profile";
 import type { User, VerifyResponse } from "@/lib/types";
 import { useAuth } from "@/store/auth";
@@ -47,7 +47,7 @@ export default function LoginPage() {
   const [slow, setSlow] = useState(false);
   const [demoUsers, setDemoUsers] = useState<User[] | null>(null);
 
-  const phone = `${countryCode}${number.replace(/\D/g, "")}`;
+  const phone = composePhone(countryCode, number);
   const signedIn = hydrated && !!token && !!user;
   const needsProfile = signedIn && !user.display_name;
 

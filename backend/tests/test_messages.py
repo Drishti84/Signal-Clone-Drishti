@@ -172,3 +172,15 @@ def test_two_people_reacting_the_same_way_are_grouped(client):
     client.put(url, headers=hr, json={"emoji": "👍"})
     both = client.put(url, headers=ha, json={"emoji": "👍"}).json()["reactions"]
     assert both == [{"emoji": "👍", "user_ids": [rohan["id"], asha["id"]]}]
+
+
+def test_client_id_reused_in_another_chat_is_a_conflict(client):
+    ha, _, _, _, conv_id = setup_direct(client)
+    _, meera = login(client, "9000000003", "Meera")
+    other = client.post("/api/conversations/direct", headers=ha,
+                        json={"user_id": meera["id"]}).json()
+    payload = {"body": "first", "client_id": str(uuid.uuid4())}
+    client.post(f"/api/conversations/{conv_id}/messages", headers=ha, json=payload)
+    clash = client.post(f"/api/conversations/{other['id']}/messages", headers=ha, json=payload)
+    assert clash.status_code == 409
+    assert messages(client, ha, other["id"]) == []

@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session as Db
 
-from app.errors import BadRequest
+from app.errors import BadRequest, Conflict
 from app.models import Message, MessageReceipt, User, utcnow
 from app.realtime.events import Event
 from app.services.conversations import get_member, member_ids
@@ -19,6 +19,8 @@ def send_message(db: Db, me: User, conversation_id: int, body: str, client_id: s
     existing = db.scalar(select(Message).where(
         Message.sender_id == me.id, Message.client_id == client_id))
     if existing is not None:
+        if existing.conversation_id != conversation_id:
+            raise Conflict("This message was already sent to another chat")
         return existing, [], False
     if reply_to_id is not None:
         target = db.get(Message, reply_to_id)
