@@ -41,8 +41,9 @@ To register a new account, enter any phone number and use the code **123456**.
 - Disappearing messages: a per-chat timer (30 seconds to 4 weeks); messages sent while it
   is on are removed for everyone when their time is up
 - Delete for everyone: the sender can remove a message; others see "This message was deleted"
-- Attachments: send a photo or any file up to 5 MB with an optional caption, by picking it or
-  pasting a picture. Photos show in the bubble and open full-size; other files download
+- Attachments: send photos or any files up to 5 MB each with an optional caption, by picking
+  them or pasting a picture. Up to 10 can be queued and are sent in order, one message each.
+  Photos show in the bubble and open full-size; other files download
 - Dark mode (System / Light / Dark), remembered per device
 - Responsive layout: two panes on desktop and tablet; on a phone, the chat list and the open
   chat take turns on screen, with the tabs along the bottom
@@ -62,7 +63,7 @@ encryption notice, but messages are stored as plain text.
 | Backend | Python, FastAPI, SQLAlchemy 2, Pydantic v2 |
 | Database | SQLite |
 | Real-time | WebSocket (one connection per browser tab) |
-| Tests | pytest (130 backend tests), Vitest (25 frontend store and helper tests) |
+| Tests | pytest (130 backend tests), Vitest (30 frontend store and helper tests) |
 | Hosting | Vercel (frontend), Render (backend) |
 
 ## Architecture
@@ -366,7 +367,8 @@ read, delivered and unsent states, so every badge and check mark has something t
   which do not count as unread for them.
 - **Avatar photos** are cropped to a square and shrunk to 256 × 256 in the browser, and are
   limited to 256 KB.
-- **Attachments are stored in SQLite**, one per message, up to 5 MB each. That keeps the stack
+- **Attachments are stored in SQLite**, one per message, up to 5 MB each. Several files picked
+  together are sent as separate messages, one after another, not as a single album. That keeps the stack
   to the one required database; a production system would use object storage. On the hosted
   demo they are lost with everything else when the server restarts.
 - **Files are private to their chat.** The browser fetches them with the login token, and only
@@ -375,6 +377,6 @@ read, delivered and unsent states, so every badge and check mark has something t
 
 ## What I would add next
 
-Several attachments per message, voice messages, message editing, catching up on
+Photo albums (several attachments in one message), voice messages, message editing, catching up on
 more than one page of missed messages after a long disconnect, and a persistent database with
 a shared pub/sub layer for multiple backend instances.

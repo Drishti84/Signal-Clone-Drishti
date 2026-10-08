@@ -27,6 +27,13 @@ type MessagesState = {
     replyTo?: Message | null,
     attachment?: OutgoingFile,
   ) => void;
+  /** Send several files, each as its own message, in the order given. */
+  sendFiles: (
+    conversationId: number,
+    files: OutgoingFile[],
+    caption: string,
+    replyTo?: Message | null,
+  ) => void;
   retry: (conversationId: number, clientId: string) => void;
   applyNew: (message: Message) => void;
   applyStatus: (conversationId: number, messageIds: number[], status: MessageStatus) => void;
@@ -153,6 +160,63 @@ export const useMessages = create<MessagesState>((set, get) => {
     }
   };
 
+  /** Put a message on screen as "sending" and return it; nothing is sent yet. */
+  const enqueue = (
+    conversationId: number,
+    body: string,
+    replyTo?: Message | null,
+    attachment?: OutgoingFile,
+  ): Message | null => {
+    const me = useAuth.getState().user;
+    if (!me) return null;
+    const clientId = crypto.randomUUID();
+    if (attachment) outgoing.set(clientId, attachment);
+    const timer = useConversations.getState().byId[conversationId]?.disappearing_seconds;
+    // Shown immediately as "sending"; the server's copy replaces it by client_id.
+    const optimistic: Message = {
+      id: --temporaryId,
+      conversation_id: conversationId,
+      sender_id: me.id,
+      type: "text",
+      body,
+      client_id: clientId,
+      created_at: new Date().toISOString(),
+      status: "sending",
+      deleted: false,
+      // Shown at once with its timer icon; the server sets the real time.
+      expires_at: timer ? new Date(Date.now() + timer * 1000).toISOString() : null,
+      reply_to: replyTo
+        ? {
+            id: replyTo.id,
+            sender_id: replyTo.sender_id,
+            body: replyTo.body.slice(0, 200),
+            deleted: replyTo.deleted,
+          }
+        : null,
+      reactions: [],
+      attachment: attachment
+        ? {
+            id: temporaryId, // not saved yet; replaced by the server's copy
+            filename: attachment.file.name,
+            content_type: attachment.file.type,
+            size: attachment.file.size,
+            is_image: attachment.width !== undefined,
+            width: attachment.width ?? null,
+            height: attachment.height ?? null,
+            local_url: URL.createObjectURL(attachment.file),
+          }
+        : null,
+    };
+    replace(conversationId, (messages) => [...messages, optimistic], true);
+    get().clearUnreadDivider(conversationId);
+    useConversations.getState().patch(conversationId, {
+      last_message: optimistic,
+      last_message_at: optimistic.created_at,
+      unread_count: 0,
+    });
+    return optimistic;
+  };
+
   return {
     byConversation: {},
     hasMore: {},
@@ -197,54 +261,24 @@ export const useMessages = create<MessagesState>((set, get) => {
     },
 
     send: (conversationId, body, replyTo, attachment) => {
-      const me = useAuth.getState().user;
-      if (!me) return;
-      const clientId = crypto.randomUUID();
-      if (attachment) outgoing.set(clientId, attachment);
-      const timer = useConversations.getState().byId[conversationId]?.disappearing_seconds;
-      // Shown immediately as "sending"; the server's copy replaces it by client_id.
-      const optimistic: Message = {
-        id: --temporaryId,
-        conversation_id: conversationId,
-        sender_id: me.id,
-        type: "text",
-        body,
-        client_id: clientId,
-        created_at: new Date().toISOString(),
-        status: "sending",
-        deleted: false,
-        // Shown at once with its timer icon; the server sets the real time.
-        expires_at: timer ? new Date(Date.now() + timer * 1000).toISOString() : null,
-        reply_to: replyTo
-          ? {
-              id: replyTo.id,
-              sender_id: replyTo.sender_id,
-              body: replyTo.body.slice(0, 200),
-              deleted: replyTo.deleted,
-            }
-          : null,
-        reactions: [],
-        attachment: attachment
-          ? {
-              id: temporaryId, // not saved yet; replaced by the server's copy
-              filename: attachment.file.name,
-              content_type: attachment.file.type,
-              size: attachment.file.size,
-              is_image: attachment.width !== undefined,
-              width: attachment.width ?? null,
-              height: attachment.height ?? null,
-              local_url: URL.createObjectURL(attachment.file),
-            }
-          : null,
-      };
-      replace(conversationId, (messages) => [...messages, optimistic], true);
-      get().clearUnreadDivider(conversationId);
-      useConversations.getState().patch(conversationId, {
-        last_message: optimistic,
-        last_message_at: optimistic.created_at,
-        unread_count: 0,
-      });
-      void post(conversationId, optimistic);
+      const message = enqueue(conversationId, body, replyTo, attachment);
+      if (message) void post(conversationId, message);
+    },
+
+    sendFiles: (conversationId, files, caption, replyTo) => {
+      // Every bubble appears straight away; the caption and the reply go
+      // with the first file.
+      const queued = files
+        .map((file, index) =>
+          enqueue(conversationId, index === 0 ? caption : "", index === 0 ? replyTo : null, file),
+        )
+        .filter((message): message is Message => message !== null);
+      // Sent strictly one after another, so they arrive in the order they
+      // were picked whatever their sizes. A failure does not stop the rest;
+      // that bubble is marked "Not sent" and can be retried on its own.
+      void (async () => {
+        for (const message of queued) await post(conversationId, message);
+      })();
     },
 
     retry: (conversationId, clientId) => {

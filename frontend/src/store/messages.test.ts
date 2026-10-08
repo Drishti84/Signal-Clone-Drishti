@@ -215,3 +215,67 @@ describe("sending an attachment", () => {
     expect(api.post).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("sending several files at once", () => {
+  const named = (name: string) => ({ file: new File([new Uint8Array([1])], name, { type: "application/pdf" }) });
+
+  beforeEach(async () => {
+    api.get.mockResolvedValueOnce({ messages: [], has_more: false });
+    await useMessages.getState().loadLatest(CHAT);
+  });
+
+  it("shows every bubble at once and delivers them one after another, in the order picked", async () => {
+    const order: string[] = [];
+    let nextId = 40;
+    let releaseFirst: () => void = () => undefined;
+    const firstUploadHeld = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    api.post.mockImplementation(async (path: string, body: unknown) => {
+      if (path.endsWith("/attachments")) {
+        const name = ((body as FormData).get("file") as File).name;
+        order.push(`upload ${name}`);
+        if (name === "a.pdf") await firstUploadHeld; // a slow first file must not be overtaken
+        return { id: nextId++, filename: name, content_type: "application/pdf", size: 1, is_image: false, width: null, height: null };
+      }
+      const sent = body as { client_id: string; body: string; attachment_id: number };
+      order.push(`message ${sent.attachment_id} "${sent.body}"`);
+      return message(sent.attachment_id + 100, ME, { client_id: sent.client_id, body: sent.body });
+    });
+
+    useMessages.getState().sendFiles(CHAT, [named("a.pdf"), named("b.pdf"), named("c.pdf")], "the caption", null);
+    const shown = useMessages.getState().byConversation[CHAT];
+    expect(shown.map((m) => m.attachment?.filename)).toEqual(["a.pdf", "b.pdf", "c.pdf"]);
+    expect(shown.map((m) => m.body)).toEqual(["the caption", "", ""]);
+    expect(shown.every((m) => m.status === "sending")).toBe(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(order).toEqual(["upload a.pdf"]); // b and c are waiting their turn
+    releaseFirst();
+    await vi.waitFor(() => expect(order).toHaveLength(6));
+    expect(order).toEqual([
+      "upload a.pdf", 'message 40 "the caption"',
+      "upload b.pdf", 'message 41 ""',
+      "upload c.pdf", 'message 42 ""',
+    ]);
+    expect(useMessages.getState().byConversation[CHAT]).toHaveLength(3);
+  });
+
+  it("keeps going when one file in the middle fails", async () => {
+    let nextId = 50;
+    api.post.mockImplementation(async (path: string, body: unknown) => {
+      if (path.endsWith("/attachments")) {
+        const name = ((body as FormData).get("file") as File).name;
+        if (name === "b.pdf") throw new Error("upload failed");
+        return { id: nextId++, filename: name, content_type: "application/pdf", size: 1, is_image: false, width: null, height: null };
+      }
+      const sent = body as { client_id: string; attachment_id: number };
+      return message(sent.attachment_id + 100, ME, { client_id: sent.client_id });
+    });
+    useMessages.getState().sendFiles(CHAT, [named("a.pdf"), named("b.pdf"), named("c.pdf")], "", null);
+    await vi.waitFor(() => {
+      const statuses = useMessages.getState().byConversation[CHAT].map((m) => m.status).sort();
+      expect(statuses).toEqual(["failed", "sent", "sent"]);
+    });
+    const failed = useMessages.getState().byConversation[CHAT].find((m) => m.status === "failed");
+    expect(failed?.attachment?.filename).toBe("b.pdf");
+  });
+});
