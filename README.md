@@ -4,7 +4,8 @@ A web clone of Signal Desktop: one-on-one and group messaging in real time, with
 delivery and read receipts, typing indicators, presence, reactions, replies and a
 light and dark theme. Built for the Scaler SDE Fullstack assignment.
 
-- **Live demo:** _added after deployment_
+- **Live demo:** https://signal-clone-drishti.vercel.app
+- **Backend API docs:** https://signal-clone-api-fs6a.onrender.com/docs
 - **Repository:** https://github.com/Drishti84/Signal-Clone-Drishti
 
 ## Try it in a minute
