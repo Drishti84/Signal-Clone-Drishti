@@ -22,6 +22,10 @@ type ConversationsState = {
 
 const inFlight = new Map<number, Promise<void>>();
 
+/** Groups we are leaving ourselves. The server still sends "removed" for
+ * them, and that event must not be reported as someone removing us. */
+export const leaving = new Set<number>();
+
 function rememberUsers(conversations: Conversation[]) {
   usePresence.getState().upsertUsers(
     conversations.flatMap((conversation) => conversation.members.map((member) => member.user)),

@@ -20,7 +20,7 @@ import { displayName, formatPhone, lastSeen, otherMember } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
 import type { Conversation, Member, User } from "@/lib/types";
 import { useContacts } from "@/store/contacts";
-import { useConversations } from "@/store/conversations";
+import { leaving, useConversations } from "@/store/conversations";
 import { usePresence } from "@/store/presence";
 import { useUi } from "@/store/ui";
 
@@ -138,7 +138,9 @@ function GroupDetails({ conversation, meId }: Props) {
     setPending(null);
     if (!action) return;
     if (action.kind === "leave") {
+      leaving.add(conversation.id);
       const left = await change(api.del<Conversation | null>(`${base}/members/${meId}`));
+      if (!left) leaving.delete(conversation.id);
       if (left) {
         useConversations.getState().remove(conversation.id);
         selectConversation(null);

@@ -1,7 +1,7 @@
 import type { ServerEvent } from "@/lib/types";
 import { useAuth } from "@/store/auth";
 import { useContacts } from "@/store/contacts";
-import { useConversations } from "@/store/conversations";
+import { leaving, useConversations } from "@/store/conversations";
 import { useMessages } from "@/store/messages";
 import { usePresence } from "@/store/presence";
 import { useUi } from "@/store/ui";
@@ -40,7 +40,7 @@ export function handleServerEvent(event: ServerEvent): void {
     case "conversation.removed": {
       const conversations = useConversations.getState();
       const removed = conversations.byId[event.data.conversation_id];
-      if (!removed) break;
+      if (leaving.delete(event.data.conversation_id) || !removed) break;
       conversations.remove(removed.id);
       useUi.getState().toast(`You are no longer in ${removed.name ?? "the group"}`);
       break;
