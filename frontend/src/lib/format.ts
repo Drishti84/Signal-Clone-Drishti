@@ -135,3 +135,20 @@ export function phoneProblem(countryCode: string, typed: string, digits: number)
   const national = phone.length - countryCode.length;
   return national === digits ? null : `Enter a valid ${digits}-digit phone number`;
 }
+
+/** What the sign-up phone box keeps of what was typed or pasted: digits
+ * only, without a leading zero or a repeated country code, and never more
+ * digits than the chosen country's numbers have. */
+export function cleanPhoneInput(countryCode: string, typed: string, digits: number): string {
+  const code = countryCode.replace(/\D/g, "");
+  let national = typed.replace(/\D/g, "").replace(/^0+/, "");
+  if (national.length > digits && national.startsWith(code)) national = national.slice(code.length);
+  return national.slice(0, digits);
+}
+
+/** What the "find by phone number" box keeps: digits and spaces, with an
+ * optional + at the very start. */
+export function cleanPhoneSearch(typed: string): string {
+  const plus = typed.trimStart().startsWith("+") ? "+" : "";
+  return (plus + typed.replace(/[^\d ]/g, "")).slice(0, 20);
+}

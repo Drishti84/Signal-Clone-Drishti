@@ -79,3 +79,22 @@ describe("previewText for attachments", () => {
     expect(previewText({ ...base, body: "the plan", sender_id: 1 }, chat, 1, {})).toBe("You: 📎 the plan");
   });
 });
+
+import { cleanPhoneInput } from "@/lib/format";
+
+describe("cleanPhoneInput", () => {
+  it("drops letters and symbols as they are typed", () => {
+    expect(cleanPhoneInput("+91", "98abc7-6 5!", 10)).toBe("98765");
+    expect(cleanPhoneInput("+91", "hello", 10)).toBe("");
+  });
+
+  it("never lets the number grow past the country's length", () => {
+    expect(cleanPhoneInput("+91", "98765432109999", 10)).toBe("9876543210");
+    expect(cleanPhoneInput("+65", "912345678", 8)).toBe("91234567");
+  });
+
+  it("still accepts a pasted number that carries the country code or a leading zero", () => {
+    expect(cleanPhoneInput("+91", "+91 98765 43210", 10)).toBe("9876543210");
+    expect(cleanPhoneInput("+91", "098765 43210", 10)).toBe("9876543210");
+  });
+});

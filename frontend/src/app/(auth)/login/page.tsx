@@ -12,7 +12,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { api, errorMessage } from "@/lib/api";
 import { COUNTRIES, DEMO_OTP, NAME_MAX_LENGTH } from "@/lib/constants";
-import { composePhone, formatPhone, phoneProblem } from "@/lib/format";
+import { cleanPhoneInput, composePhone, formatPhone, phoneProblem } from "@/lib/format";
 import { draftFromUser, saveProfile, type AvatarDraft } from "@/lib/profile";
 import type { User, VerifyResponse } from "@/lib/types";
 import { useAuth } from "@/store/auth";
@@ -38,6 +38,7 @@ export default function LoginPage() {
   const [slow, setSlow] = useState(false);
   const [demoUsers, setDemoUsers] = useState<User[] | null>(null);
 
+  const country = COUNTRIES.find((entry) => entry.code === countryCode) ?? COUNTRIES[0];
   const phone = composePhone(countryCode, number);
   const signedIn = hydrated && !!token && !!user;
   const needsProfile = signedIn && !user.display_name;
@@ -98,8 +99,7 @@ export default function LoginPage() {
   const submitPhone = (event: FormEvent) => {
     event.preventDefault();
     // Catch a wrong-length number here, before any code is "sent".
-    const country = COUNTRIES.find((entry) => entry.code === countryCode);
-    const problem = country ? phoneProblem(countryCode, number, country.digits) : null;
+    const problem = phoneProblem(countryCode, number, country.digits);
     if (problem) {
       setError(problem);
       return;
@@ -188,7 +188,13 @@ export default function LoginPage() {
                 <span className="text-[13px] font-medium text-fg-2">Country</span>
                 <select
                   value={countryCode}
-                  onChange={(event) => setCountryCode(event.target.value)}
+                  onChange={(event) => {
+                    const next = COUNTRIES.find((entry) => entry.code === event.target.value) ?? country;
+                    setCountryCode(next.code);
+                    // A different country may allow fewer digits.
+                    setNumber((current) => cleanPhoneInput(next.code, current, next.digits));
+                    setError("");
+                  }}
                   className="h-10 rounded-lg border border-border bg-bg px-2 outline-none focus:border-accent"
                 >
                   {COUNTRIES.map((country) => (
@@ -202,17 +208,25 @@ export default function LoginPage() {
                   <span className="border-r border-border px-3 text-fg-2">{countryCode}</span>
                   <input
                     value={number}
-                    onChange={(event) => setNumber(event.target.value)}
+                    onChange={(event) => {
+                      // Letters, symbols and extra digits never make it into the box.
+                      setNumber(cleanPhoneInput(countryCode, event.target.value, country.digits));
+                      setError("");
+                    }}
                     type="tel"
-                    inputMode="tel"
+                    inputMode="numeric"
+                    aria-describedby="phone-hint"
                     autoComplete="tel-national"
                     autoFocus
                     placeholder="98765 43210"
                     className="h-full min-w-0 flex-1 bg-transparent px-3 outline-none"
                   />
                 </div>
+                <span id="phone-hint" className="text-xs text-fg-3">
+                  {number.length} of {country.digits} digits
+                </span>
               </label>
-              <Button type="submit" disabled={busy || !number.trim()}>
+              <Button type="submit" disabled={busy || number.length !== country.digits}>
                 {busy ? <Spinner size={16} /> : "Next"}
               </Button>
             </form>

@@ -12,7 +12,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Spinner } from "@/components/ui/Spinner";
 import { openDirectChat } from "@/lib/actions";
 import { api, errorMessage } from "@/lib/api";
-import { displayName } from "@/lib/format";
+import { cleanPhoneSearch, displayName } from "@/lib/format";
 import type { User } from "@/lib/types";
 import { useContacts } from "@/store/contacts";
 import { useUi } from "@/store/ui";
@@ -62,7 +62,7 @@ export function NewChatDialog() {
           </p>
           <input
             value={phone}
-            onChange={(event) => setPhone(event.target.value)}
+            onChange={(event) => setPhone(cleanPhoneSearch(event.target.value))}
             type="tel"
             autoFocus
             placeholder="+91 90000 00002"
